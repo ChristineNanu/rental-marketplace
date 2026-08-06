@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Float
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Float, Text, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import database
@@ -65,3 +65,52 @@ class Category(Base):
     slug = Column(String, unique=True, index=True)
     listing_type = Column(String)  # item | space
     parent_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+
+
+class Listing(Base):
+    __tablename__ = "listings"
+    __table_args__ = (
+        Index("ix_listings_category_id", "category_id"),
+        Index("ix_listings_area_id", "area_id"),
+        Index("ix_listings_owner_id", "owner_id"),
+        Index("ix_listings_status", "status"),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), index=True)
+    category_id = Column(Integer, ForeignKey("categories.id"))
+    area_id = Column(Integer, ForeignKey("areas.id"))
+    title = Column(String, index=True)
+    description = Column(Text, default="")
+    price_per_day = Column(Float)
+    deposit_amount = Column(Float, default=0.0)
+    photos = Column(String, default="")  # comma-separated photo URLs
+    status = Column(String, default="active")  # active | paused | deleted
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    owner = relationship("User")
+    category = relationship("Category")
+    area = relationship("Area")
+
+
+class Booking(Base):
+    __tablename__ = "bookings"
+    __table_args__ = (
+        Index("ix_bookings_listing_id", "listing_id"),
+        Index("ix_bookings_renter_id", "renter_id"),
+        Index("ix_bookings_status", "status"),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    listing_id = Column(Integer, ForeignKey("listings.id"), index=True)
+    renter_id = Column(Integer, ForeignKey("users.id"), index=True)
+    start_date = Column(DateTime(timezone=True))
+    end_date = Column(DateTime(timezone=True))
+    total_price = Column(Float)
+    deposit_amount = Column(Float, default=0.0)
+    # requested -> accepted|declined by owner; accepted -> cancelled|completed.
+    # Payment/escrow status is deliberately separate from this lifecycle (Phase 2).
+    status = Column(String, default="requested")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    listing = relationship("Listing")
+    renter = relationship("User")
