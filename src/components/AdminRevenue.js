@@ -3,9 +3,10 @@ import { API_BASE_URL } from '../constants';
 import { apiFetch } from '../api';
 import Nav from './Nav';
 
-function StatTile({ label, value, sublabel }) {
+function StatTile({ icon, label, value, sublabel }) {
   return (
-    <div className="card p-6">
+    <div className="card-static p-6">
+      <p className="text-2xl mb-2">{icon}</p>
       <p className="text-xs font-black text-amber-600 uppercase tracking-widest mb-2">{label}</p>
       <p className="text-2xl font-black text-slate-900">{value}</p>
       {sublabel && <p className="text-xs text-slate-400 mt-1">{sublabel}</p>}
@@ -36,23 +37,26 @@ export default function AdminRevenue({ onLogout }) {
 
         {data && (
           <>
-            <div className="card p-6 bg-gradient-to-r from-amber-500 to-amber-600 border-0">
+            <div className="card-static p-6 bg-gradient-to-r from-amber-500 to-amber-600 border-0">
               <p className="text-xs font-black text-amber-100 uppercase tracking-widest mb-2">Total platform revenue</p>
               <p className="text-3xl font-black text-white">{kes(data.total_platform_revenue_kes)}</p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <StatTile
+                icon="🤝"
                 label="Booking commission"
                 value={kes(data.commission_kes)}
                 sublabel={`${data.commission_transaction_count} paid booking(s) · ${kes(data.gross_rental_kes)} gross rental`}
               />
               <StatTile
+                icon="★"
                 label="Featured listings"
                 value={kes(data.featured_listing_revenue_kes)}
                 sublabel={`${data.featured_listing_count} purchase(s)`}
               />
               <StatTile
+                icon="💼"
                 label="Business subscriptions"
                 value={kes(data.subscription_revenue_kes)}
                 sublabel={`${data.active_business_subscriptions} active`}

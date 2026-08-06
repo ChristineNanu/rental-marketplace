@@ -5,6 +5,7 @@ import { apiFetch } from '../api';
 import Nav from './Nav';
 import MpesaPaymentModal from './MpesaPaymentModal';
 import RatingModal from './RatingModal';
+import ListingThumb from './ListingThumb';
 
 const STATUS_STYLES = {
   requested: 'bg-amber-100 text-amber-700',
@@ -54,14 +55,15 @@ export default function MyBookings({ onLogout }) {
         {bookings === null ? (
           <p className="text-center text-slate-400 py-12">Loading...</p>
         ) : bookings.length === 0 ? (
-          <div className="card p-8 text-center text-slate-400">
+          <div className="card-static p-8 text-center text-slate-400">
             No rental requests yet.
             <button onClick={() => navigate('/browse')} className="block mx-auto mt-3 btn-primary px-6 py-2">Browse listings</button>
           </div>
         ) : (
           bookings.map(b => (
-            <div key={b.id} className="card p-5 flex items-center justify-between">
-              <div>
+            <div key={b.id} className="card-static p-5 flex items-center gap-4 flex-wrap">
+              <ListingThumb photos={b.listing.photos} alt={b.listing.title} className="w-20 h-20 rounded-2xl shrink-0" iconClassName="text-2xl" />
+              <div className="flex-1 min-w-0">
                 <p className="text-xs font-black text-amber-600 uppercase tracking-widest mb-1">{b.listing.category.name} · {b.listing.area.name}</p>
                 <h3 className="text-lg font-black text-slate-900">{b.listing.title}</h3>
                 <p className="text-sm text-slate-500">
@@ -69,7 +71,7 @@ export default function MyBookings({ onLogout }) {
                   {b.deposit_amount > 0 && <> + KES {b.deposit_amount.toLocaleString()} deposit</>}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className={`px-2 py-1 rounded-lg text-xs font-bold ${STATUS_STYLES[b.status] || 'bg-slate-100 text-slate-500'}`}>{b.status}</span>
                 {b.payment_status === 'paid' && (
                   <span className="px-2 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-600">Paid</span>

@@ -5,6 +5,7 @@ import { apiFetch } from '../api';
 import Nav from './Nav';
 import RatingModal from './RatingModal';
 import SimplePaymentModal from './SimplePaymentModal';
+import ListingThumb from './ListingThumb';
 
 const STATUS_STYLES = {
   requested: 'bg-amber-100 text-amber-700',
@@ -206,32 +207,35 @@ export default function MyListings({ onLogout }) {
         {listings === null ? (
           <p className="text-center text-slate-400 py-12">Loading...</p>
         ) : listings.length === 0 ? (
-          <div className="card p-8 text-center text-slate-400">
+          <div className="card-static p-8 text-center text-slate-400">
             You haven't listed anything yet.
             <button onClick={() => navigate('/listings/new')} className="block mx-auto mt-3 btn-primary px-6 py-2">List your first item</button>
           </div>
         ) : (
           listings.map(listing => (
-            <div key={listing.id} className="card p-5">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-black text-amber-600 uppercase tracking-widest mb-1">{listing.category.name} · {listing.area.name}</p>
-                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                    {listing.title}
-                    {listing.is_featured && <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-amber-100 text-amber-700">★ Featured</span>}
-                  </h3>
-                  <p className="text-sm text-slate-500">KES {listing.price_per_day.toLocaleString()}/day</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-1 rounded-lg text-xs font-bold ${listing.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                    {listing.status}
-                  </span>
-                  <button onClick={() => togglePause(listing)} className="text-xs font-bold text-slate-500 bg-white border border-slate-200 rounded-lg px-2 py-1 cursor-pointer">
-                    {listing.status === 'active' ? 'Pause' : 'Reactivate'}
-                  </button>
-                  <button onClick={() => remove(listing)} className="text-xs font-bold text-red-500 bg-white border border-red-200 rounded-lg px-2 py-1 cursor-pointer">
-                    Remove
-                  </button>
+            <div key={listing.id} className="card-static p-5">
+              <div className="flex items-start gap-4">
+                <ListingThumb photos={listing.photos} alt={listing.title} className="w-20 h-20 rounded-2xl shrink-0" iconClassName="text-2xl" />
+                <div className="flex-1 min-w-0 flex items-start justify-between flex-wrap gap-2">
+                  <div>
+                    <p className="text-xs font-black text-amber-600 uppercase tracking-widest mb-1">{listing.category.name} · {listing.area.name}</p>
+                    <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 flex-wrap">
+                      {listing.title}
+                      {listing.is_featured && <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-amber-100 text-amber-700">★ Featured</span>}
+                    </h3>
+                    <p className="text-sm text-slate-500">KES {listing.price_per_day.toLocaleString()}/day</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-1 rounded-lg text-xs font-bold ${listing.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                      {listing.status}
+                    </span>
+                    <button onClick={() => togglePause(listing)} className="text-xs font-bold text-slate-500 bg-white border border-slate-200 rounded-lg px-2 py-1 cursor-pointer">
+                      {listing.status === 'active' ? 'Pause' : 'Reactivate'}
+                    </button>
+                    <button onClick={() => remove(listing)} className="text-xs font-bold text-red-500 bg-white border border-red-200 rounded-lg px-2 py-1 cursor-pointer">
+                      Remove
+                    </button>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-3 mt-2">

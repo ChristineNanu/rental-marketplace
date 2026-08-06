@@ -54,13 +54,23 @@ by_slug = {c.slug: c for c in db.query(models.Category).all()}
 
 SAMPLE_LISTINGS = [
     {"title": "Bosch Cordless Drill", "category": "tools", "price_per_day": 300, "deposit_amount": 1500,
-     "description": "18V cordless drill with two batteries and a full bit set."},
+     "description": "18V cordless drill with two batteries and a full bit set.",
+     "photos": "https://images.unsplash.com/photo-1504148455328-c376907d081c?w=800&q=80,"
+               "https://images.unsplash.com/photo-1572981779307-38b8cabb2407?w=800&q=80"},
     {"title": "4-Person Camping Tent", "category": "camping-gear", "price_per_day": 500, "deposit_amount": 2000,
-     "description": "Waterproof dome tent, easy 10-minute setup, sleeps 4."},
+     "description": "Waterproof dome tent, easy 10-minute setup, sleeps 4.",
+     "photos": "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=800&q=80,"
+               "https://images.unsplash.com/photo-1533106418989-88406c7cc8ca?w=800&q=80"},
     {"title": "JBL PA Speaker + Mixer", "category": "event-equipment", "price_per_day": 2500, "deposit_amount": 8000,
-     "description": "Portable PA system good for small events up to 100 guests."},
+     "description": "Portable PA system good for small events up to 100 guests.",
+     "photos": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&q=80"},
     {"title": "Spare Room Near Yaya Centre", "category": "spare-rooms", "price_per_day": 1800, "deposit_amount": 0,
-     "description": "Furnished ensuite spare room, short stays welcome."},
+     "description": "Furnished ensuite spare room, short stays welcome.",
+     "photos": "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80,"
+               "https://images.unsplash.com/photo-1567016432779-094069958ea5?w=800&q=80"},
+    {"title": "Secure Parking Spot, Kilimani", "category": "parking-spots", "price_per_day": 400, "deposit_amount": 0,
+     "description": "Gated, CCTV-covered parking spot, walking distance to Yaya Centre.",
+     "photos": "https://images.unsplash.com/photo-1573348722427-f1d6819fdf98?w=800&q=80"},
 ]
 
 if not db.query(models.Listing).first() and demo and kilimani:
@@ -76,6 +86,7 @@ if not db.query(models.Listing).first() and demo and kilimani:
             description=item["description"],
             price_per_day=item["price_per_day"],
             deposit_amount=item["deposit_amount"],
+            photos=item.get("photos", ""),
         ))
     db.commit()
 

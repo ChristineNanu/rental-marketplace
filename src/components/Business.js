@@ -5,9 +5,9 @@ import Nav from './Nav';
 import SimplePaymentModal from './SimplePaymentModal';
 
 const PLANS = [
-  { id: 'free', name: 'Free', price: 0, perks: ['List items and spaces', 'Standard placement in Browse'] },
-  { id: 'pro', name: 'Pro', price: 1000, perks: ['Everything in Free', 'Business badge on your listings', 'Priority support'] },
-  { id: 'premium', name: 'Premium', price: 2500, perks: ['Everything in Pro', 'One free featured listing slot/month', 'Early access to new categories'] },
+  { id: 'free', name: 'Free', icon: '🆓', price: 0, perks: ['List items and spaces', 'Standard placement in Browse'] },
+  { id: 'pro', name: 'Pro', icon: '💼', price: 1000, perks: ['Everything in Free', 'Business badge on your listings', 'Priority support'] },
+  { id: 'premium', name: 'Premium', icon: '👑', price: 2500, highlight: true, perks: ['Everything in Pro', 'One free featured listing slot/month', 'Early access to new categories'] },
 ];
 
 export default function Business({ onLogout }) {
@@ -38,7 +38,11 @@ export default function Business({ onLogout }) {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {PLANS.map(plan => (
-            <div key={plan.id} className={`card p-6 flex flex-col ${currentPlan === plan.id ? 'ring-2 ring-amber-400' : ''}`}>
+            <div key={plan.id} className={`card p-6 flex flex-col relative ${currentPlan === plan.id ? 'ring-2 ring-amber-400' : plan.highlight ? 'ring-1 ring-amber-200' : ''}`}>
+              {plan.highlight && currentPlan !== plan.id && (
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-xs font-bold bg-amber-500 text-white shadow">Best value</span>
+              )}
+              <p className="text-2xl mb-2">{plan.icon}</p>
               <p className="text-xs font-black text-amber-600 uppercase tracking-widest mb-1">{plan.name}</p>
               <p className="text-2xl font-black text-slate-900 mb-4">
                 {plan.price === 0 ? 'Free' : `KES ${plan.price.toLocaleString()}`}
