@@ -1,6 +1,17 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from datetime import datetime
+
+
+def _normalize_kenyan_phone(v: str) -> str:
+    phone = v.strip().replace('+', '').replace(' ', '')
+    if phone.startswith('0'):
+        phone = '254' + phone[1:]
+    if not phone.startswith('254'):
+        phone = '254' + phone
+    if len(phone) != 12:
+        raise ValueError('Invalid phone number. Use format: 0712345678 or 254712345678')
+    return phone
 
 
 class UserCreate(BaseModel):
@@ -133,9 +144,75 @@ class BookingOut(BaseModel):
     total_price: float
     deposit_amount: float
     status: str
+    payment_status: str
+    deposit_status: str
     created_at: datetime
     renter: RenterOut
     listing: ListingOut
+
+    class Config:
+        from_attributes = True
+
+
+# ─── PAYMENTS (M-PESA) ────────────────────────────────────────────────────────
+
+class PaymentRequest(BaseModel):
+    phone: str
+
+    @field_validator('phone')
+    @classmethod
+    def validate_phone(cls, v):
+        return _normalize_kenyan_phone(v)
+
+
+class DepositClaimRequest(BaseModel):
+    phone: str
+    reason: str
+
+    @field_validator('phone')
+    @classmethod
+    def validate_phone(cls, v):
+        return _normalize_kenyan_phone(v)
+
+
+class PaymentOut(BaseModel):
+    id: int
+    booking_id: int
+    phone: str
+    rental_amount: float
+    deposit_amount: float
+    amount: float
+    status: str
+    mpesa_receipt: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ─── RATINGS ─────────────────────────────────────────────────────────────────
+
+class RatingCreate(BaseModel):
+    score: int
+    comment: Optional[str] = ""
+
+    @field_validator('score')
+    @classmethod
+    def validate_score(cls, v):
+        if v < 1 or v > 5:
+            raise ValueError('Score must be between 1 and 5')
+        return v
+
+
+class RatingOut(BaseModel):
+    id: int
+    booking_id: int
+    rater_id: int
+    ratee_id: int
+    rated_role: str
+    score: int
+    comment: str
+    created_at: datetime
 
     class Config:
         from_attributes = True

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../constants';
 import { apiFetch } from '../api';
 import Nav from './Nav';
+import RatingModal from './RatingModal';
 
 const STATUS_STYLES = {
   requested: 'bg-amber-100 text-amber-700',
@@ -12,9 +13,66 @@ const STATUS_STYLES = {
   completed: 'bg-blue-100 text-blue-700',
 };
 
-function RequestsPanel({ listingId }) {
+const DEPOSIT_LABELS = {
+  held: 'Deposit held',
+  released: 'Deposit refunded',
+  claimed: 'Deposit claimed',
+};
+
+function ClaimDepositModal({ booking, onCancel, onSuccess }) {
+  const [phone, setPhone] = useState('');
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(''); setSubmitting(true);
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/bookings/${booking.id}/claim-deposit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, reason }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onSuccess();
+      } else {
+        setError(data.detail || 'Could not claim deposit.');
+      }
+    } catch {
+      setError('Connection error. Is the backend running?');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+      <div className="card p-8 w-full max-w-md">
+        <p className="text-xs font-black text-red-500 uppercase tracking-widest mb-1">Claim deposit</p>
+        <h2 className="text-xl font-black text-slate-900 mb-1">{booking.listing.title}</h2>
+        <p className="text-sm text-slate-500 mb-6">KES {booking.deposit_amount.toLocaleString()} will be paid out to the phone number below.</p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input className="input-field" type="tel" placeholder="Your M-PESA phone e.g. 0712345678" value={phone} onChange={e => setPhone(e.target.value)} required />
+          <textarea className="input-field" rows={3} placeholder="Reason (e.g. item returned damaged)" value={reason} onChange={e => setReason(e.target.value)} required />
+          {error && <p className="text-sm text-red-600 font-semibold">{error}</p>}
+          <button type="submit" disabled={submitting} className="w-full py-3 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-bold border-0 cursor-pointer">
+            {submitting ? 'Submitting...' : 'Claim deposit'}
+          </button>
+          <button type="button" onClick={onCancel} className="w-full text-sm font-bold text-slate-500 bg-transparent border-0 cursor-pointer py-1">Cancel</button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function RequestsPanel({ listingId, onDepositResolved }) {
   const [bookings, setBookings] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [claimingBooking, setClaimingBooking] = useState(null);
+  const [ratingBooking, setRatingBooking] = useState(null);
+  const [ratedIds, setRatedIds] = useState([]);
 
   const load = () => apiFetch(`${API_BASE_URL}/listings/${listingId}/bookings`)
     .then(r => r.ok ? r.json() : [])
@@ -24,12 +82,28 @@ function RequestsPanel({ listingId }) {
 
   const act = async (bookingId, status) => {
     setBusyId(bookingId);
-    await apiFetch(`${API_BASE_URL}/bookings/${bookingId}`, {
+    const res = await apiFetch(`${API_BASE_URL}/bookings/${bookingId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      window.alert(data.detail || 'That action failed.');
+    }
     await load();
+    setBusyId(null);
+  };
+
+  const releaseDeposit = async (bookingId) => {
+    setBusyId(bookingId);
+    const res = await apiFetch(`${API_BASE_URL}/bookings/${bookingId}/release-deposit`, { method: 'POST' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      window.alert(data.detail || 'Could not release deposit.');
+    }
+    await load();
+    onDepositResolved();
     setBusyId(null);
   };
 
@@ -39,14 +113,20 @@ function RequestsPanel({ listingId }) {
   return (
     <div className="space-y-2 pt-3 border-t border-slate-100 mt-3">
       {bookings.map(b => (
-        <div key={b.id} className="flex items-center justify-between text-sm bg-slate-50 rounded-xl px-3 py-2">
+        <div key={b.id} className="flex items-center justify-between text-sm bg-slate-50 rounded-xl px-3 py-2 flex-wrap gap-y-2">
           <div>
             <span className="font-bold text-slate-700">{b.renter.full_name || b.renter.username}</span>
             <span className="text-slate-400"> · {new Date(b.start_date).toLocaleDateString()} – {new Date(b.end_date).toLocaleDateString()}</span>
             <span className="text-slate-400"> · KES {b.total_price.toLocaleString()}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className={`px-2 py-1 rounded-lg text-xs font-bold ${STATUS_STYLES[b.status] || 'bg-slate-100 text-slate-500'}`}>{b.status}</span>
+            {b.status === 'accepted' && b.payment_status === 'unpaid' && (
+              <span className="px-2 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-600">Awaiting payment</span>
+            )}
+            {b.deposit_status !== 'none' && (
+              <span className="px-2 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-500">{DEPOSIT_LABELS[b.deposit_status]}</span>
+            )}
             {b.status === 'requested' && (
               <>
                 <button disabled={busyId === b.id} onClick={() => act(b.id, 'accepted')} className="text-xs font-bold text-emerald-600 bg-white border border-emerald-200 rounded-lg px-2 py-1 cursor-pointer">Accept</button>
@@ -54,11 +134,37 @@ function RequestsPanel({ listingId }) {
               </>
             )}
             {b.status === 'accepted' && (
-              <button disabled={busyId === b.id} onClick={() => act(b.id, 'completed')} className="text-xs font-bold text-blue-600 bg-white border border-blue-200 rounded-lg px-2 py-1 cursor-pointer">Mark completed</button>
+              <button disabled={busyId === b.id || b.payment_status !== 'paid'} onClick={() => act(b.id, 'completed')} className="text-xs font-bold text-blue-600 bg-white border border-blue-200 rounded-lg px-2 py-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">Mark completed</button>
+            )}
+            {b.status === 'completed' && b.deposit_status === 'held' && (
+              <>
+                <button disabled={busyId === b.id} onClick={() => releaseDeposit(b.id)} className="text-xs font-bold text-emerald-600 bg-white border border-emerald-200 rounded-lg px-2 py-1 cursor-pointer">Release deposit</button>
+                <button disabled={busyId === b.id} onClick={() => setClaimingBooking(b)} className="text-xs font-bold text-red-500 bg-white border border-red-200 rounded-lg px-2 py-1 cursor-pointer">Claim deposit</button>
+              </>
+            )}
+            {b.status === 'completed' && !ratedIds.includes(b.id) && (
+              <button onClick={() => setRatingBooking(b)} className="text-xs font-bold text-amber-600 bg-white border border-amber-200 rounded-lg px-2 py-1 cursor-pointer">Rate renter</button>
             )}
           </div>
         </div>
       ))}
+
+      {claimingBooking && (
+        <ClaimDepositModal
+          booking={claimingBooking}
+          onCancel={() => setClaimingBooking(null)}
+          onSuccess={() => { setClaimingBooking(null); load(); onDepositResolved(); }}
+        />
+      )}
+
+      {ratingBooking && (
+        <RatingModal
+          booking={ratingBooking}
+          targetLabel="the renter"
+          onCancel={() => setRatingBooking(null)}
+          onSuccess={() => { setRatedIds(ids => [...ids, ratingBooking.id]); setRatingBooking(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -129,7 +235,7 @@ export default function MyListings({ onLogout }) {
               >
                 {expanded === listing.id ? 'Hide requests ▲' : 'View requests ▼'}
               </button>
-              {expanded === listing.id && <RequestsPanel listingId={listing.id} />}
+              {expanded === listing.id && <RequestsPanel listingId={listing.id} onDepositResolved={load} />}
             </div>
           ))
         )}

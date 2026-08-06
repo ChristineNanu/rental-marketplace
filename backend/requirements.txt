@@ -4,5 +4,6 @@ sqlalchemy
 bcrypt
 python-multipart
 psycopg2-binary
+requests
 python-dotenv
 PyJWT==2.10.1

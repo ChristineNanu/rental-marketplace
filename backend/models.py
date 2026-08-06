@@ -108,9 +108,57 @@ class Booking(Base):
     total_price = Column(Float)
     deposit_amount = Column(Float, default=0.0)
     # requested -> accepted|declined by owner; accepted -> cancelled|completed.
-    # Payment/escrow status is deliberately separate from this lifecycle (Phase 2).
     status = Column(String, default="requested")
+    # unpaid -> paid, set from the STK push callback/test-complete. accepted -> completed
+    # requires paid, so the owner can't mark a rental done that was never charged.
+    payment_status = Column(String, default="unpaid")
+    # none (no deposit on this listing) -> held (paid in) -> released (back to renter)
+    #   | claimed (paid out to owner for damage/no-return).
+    deposit_status = Column(String, default="none")
+    deposit_claim_reason = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     listing = relationship("Listing")
     renter = relationship("User")
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+    __table_args__ = (
+        Index("ix_payments_booking_id", "booking_id"),
+        Index("ix_payments_checkout_request_id", "checkout_request_id"),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    booking_id = Column(Integer, ForeignKey("bookings.id"), index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))  # the renter who paid
+    phone = Column(String)
+    rental_amount = Column(Float)
+    deposit_amount = Column(Float, default=0.0)
+    amount = Column(Float)  # rental_amount + deposit_amount — what STK actually charges
+    checkout_request_id = Column(String, nullable=True)
+    merchant_request_id = Column(String, nullable=True)
+    status = Column(String, default="pending")  # pending | completed | failed
+    mpesa_receipt = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    booking = relationship("Booking")
+    user = relationship("User")
+
+
+class Rating(Base):
+    __tablename__ = "ratings"
+    __table_args__ = (
+        Index("ix_ratings_booking_role", "booking_id", "rated_role", unique=True),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    booking_id = Column(Integer, ForeignKey("bookings.id"), index=True)
+    rater_id = Column(Integer, ForeignKey("users.id"))
+    ratee_id = Column(Integer, ForeignKey("users.id"))
+    rated_role = Column(String)  # "owner" | "renter" — which role the ratee is being scored for
+    score = Column(Integer)  # 1-5
+    comment = Column(Text, default="")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    booking = relationship("Booking")
+    rater = relationship("User", foreign_keys=[rater_id])
+    ratee = relationship("User", foreign_keys=[ratee_id])

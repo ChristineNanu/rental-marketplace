@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 import models
 import schemas
 import auth
+from daraja import stk_push, query_stk_status, b2c_payout
 from database import get_db, engine
 
 models.Base.metadata.create_all(bind=engine)
@@ -279,6 +281,250 @@ def update_booking_status(booking_id: int, body: schemas.BookingStatusUpdate, cu
     if new_status in {"accepted", "declined", "completed"} and not is_owner:
         raise HTTPException(status_code=403, detail="Only the listing owner can do that")
 
+    if new_status == "completed" and booking.payment_status != "paid":
+        raise HTTPException(status_code=400, detail="Can't complete a booking that hasn't been paid for yet")
+
     booking.status = new_status
     db.commit()
     return _booking_query(db).filter(models.Booking.id == booking.id).first()
+
+
+# ─── PAYMENTS (M-PESA) ────────────────────────────────────────────────────────
+
+def require_dev_env():
+    if os.getenv("ENV", "development") == "production":
+        raise HTTPException(status_code=403, detail="This endpoint is disabled in production")
+
+
+def _get_booking_for_user(booking_id: int, current_user: models.User, db: Session) -> models.Booking:
+    booking = db.query(models.Booking).options(joinedload(models.Booking.listing)).filter(models.Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    is_owner = booking.listing.owner_id == current_user.id
+    is_renter = booking.renter_id == current_user.id
+    if not is_owner and not is_renter:
+        raise HTTPException(status_code=403, detail="Not part of this booking")
+    return booking
+
+
+@app.post("/bookings/{booking_id}/pay")
+def pay_for_booking(booking_id: int, body: schemas.PaymentRequest, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    booking = db.query(models.Booking).filter(models.Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.renter_id != current_user.id:
+        raise HTTPException(status_code=403, detail="This booking doesn't belong to you")
+    if booking.status != "accepted":
+        raise HTTPException(status_code=400, detail="Booking must be accepted by the owner before paying")
+    if booking.payment_status == "paid":
+        raise HTTPException(status_code=400, detail="This booking is already paid")
+
+    amount = int(round(booking.total_price + booking.deposit_amount))
+    try:
+        result = stk_push(
+            phone=body.phone,
+            amount=amount,
+            account_ref=f"BOOKING-{booking.id}",
+            description=f"Rental booking #{booking.id}",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"M-PESA error: {str(e)}")
+
+    if result.get("ResponseCode") != "0":
+        raise HTTPException(status_code=400, detail=result.get("errorMessage", "STK Push failed"))
+
+    payment = models.Payment(
+        booking_id=booking.id,
+        user_id=current_user.id,
+        phone=body.phone,
+        rental_amount=booking.total_price,
+        deposit_amount=booking.deposit_amount,
+        amount=amount,
+        checkout_request_id=result.get("CheckoutRequestID"),
+        merchant_request_id=result.get("MerchantRequestID"),
+        status="pending",
+    )
+    db.add(payment)
+    db.commit()
+    db.refresh(payment)
+
+    return {
+        "message": "STK Push sent! Check your phone and enter your M-PESA PIN.",
+        "checkout_request_id": result.get("CheckoutRequestID"),
+        "payment_id": payment.id,
+    }
+
+
+def _mark_payment_completed(payment: models.Payment, db: Session, mpesa_receipt: Optional[str] = None):
+    payment.status = "completed"
+    payment.mpesa_receipt = mpesa_receipt or payment.mpesa_receipt
+    booking = payment.booking or db.query(models.Booking).filter(models.Booking.id == payment.booking_id).first()
+    if booking:
+        booking.payment_status = "paid"
+        if booking.deposit_amount > 0:
+            booking.deposit_status = "held"
+    db.commit()
+
+
+@app.get("/payments/{payment_id}/status", response_model=schemas.PaymentOut)
+def check_payment_status(payment_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    payment = db.query(models.Payment).options(joinedload(models.Payment.booking)).filter(models.Payment.id == payment_id).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    if payment.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="This payment doesn't belong to you")
+
+    if payment.status == "pending" and payment.checkout_request_id:
+        try:
+            result = query_stk_status(payment.checkout_request_id)
+            if str(result.get("ResultCode", "")) == "0":
+                _mark_payment_completed(payment, db, result.get("MpesaReceiptNumber"))
+        except Exception as e:
+            print(f"STK query error for payment {payment_id}: {e}")
+
+    return payment
+
+
+@app.post("/pay/callback")
+async def mpesa_callback(request: Request, db: Session = Depends(get_db)):
+    body = await request.json()
+    try:
+        stk_callback = body["Body"]["stkCallback"]
+        checkout_request_id = stk_callback["CheckoutRequestID"]
+        result_code = stk_callback["ResultCode"]
+
+        payment = db.query(models.Payment).filter(
+            models.Payment.checkout_request_id == checkout_request_id
+        ).first()
+        if not payment:
+            return {"ResultCode": 0, "ResultDesc": "Accepted"}
+
+        if result_code == 0:
+            metadata = stk_callback.get("CallbackMetadata", {}).get("Item", [])
+            receipt = next((i["Value"] for i in metadata if i["Name"] == "MpesaReceiptNumber"), None)
+            _mark_payment_completed(payment, db, receipt)
+        else:
+            payment.status = "failed"
+            db.commit()
+    except Exception as e:
+        print(f"M-PESA callback error: {e}")
+
+    return {"ResultCode": 0, "ResultDesc": "Accepted"}
+
+
+@app.post("/payments/{payment_id}/test-complete", response_model=schemas.PaymentOut)
+def test_complete_payment(payment_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    """Marks a payment completed without a real M-PESA round trip. Local/dev only —
+    there's no publicly reachable callback URL for Safaricom to hit in local dev."""
+    require_dev_env()
+    payment = db.query(models.Payment).filter(models.Payment.id == payment_id).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    if payment.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="This payment doesn't belong to you")
+    _mark_payment_completed(payment, db, "TEST123456")
+    return payment
+
+
+# ─── DEPOSITS ────────────────────────────────────────────────────────────────
+
+def _get_completed_booking_with_held_deposit(booking_id: int, current_user: models.User, db: Session) -> models.Booking:
+    booking = db.query(models.Booking).filter(models.Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    _get_owned_listing(booking.listing_id, current_user, db)  # raises 403 if not the listing owner
+    if booking.status != "completed":
+        raise HTTPException(status_code=400, detail="Booking must be completed first")
+    if booking.deposit_status != "held":
+        raise HTTPException(status_code=400, detail=f"Deposit isn't held (status: {booking.deposit_status})")
+    return booking
+
+
+@app.post("/bookings/{booking_id}/release-deposit", response_model=schemas.BookingOut)
+def release_deposit(booking_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    booking = _get_completed_booking_with_held_deposit(booking_id, current_user, db)
+
+    payment = db.query(models.Payment).filter(models.Payment.booking_id == booking.id, models.Payment.status == "completed").first()
+    if not payment:
+        raise HTTPException(status_code=400, detail="No completed payment found for this booking")
+
+    try:
+        b2c_payout(
+            phone=payment.phone,
+            amount=int(round(booking.deposit_amount)),
+            occasion=f"Deposit release booking {booking.id}",
+            remarks="Deposit returned — item returned in good condition",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"M-PESA error: {str(e)}")
+
+    booking.deposit_status = "released"
+    db.commit()
+    return _booking_query(db).filter(models.Booking.id == booking.id).first()
+
+
+@app.post("/bookings/{booking_id}/claim-deposit", response_model=schemas.BookingOut)
+def claim_deposit(booking_id: int, body: schemas.DepositClaimRequest, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    booking = _get_completed_booking_with_held_deposit(booking_id, current_user, db)
+    if not body.reason.strip():
+        raise HTTPException(status_code=400, detail="A reason is required to claim a deposit")
+
+    try:
+        b2c_payout(
+            phone=body.phone,
+            amount=int(round(booking.deposit_amount)),
+            occasion=f"Deposit claim booking {booking.id}",
+            remarks=body.reason[:100],
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"M-PESA error: {str(e)}")
+
+    booking.deposit_status = "claimed"
+    booking.deposit_claim_reason = body.reason
+    db.commit()
+    return _booking_query(db).filter(models.Booking.id == booking.id).first()
+
+
+# ─── RATINGS ─────────────────────────────────────────────────────────────────
+
+@app.post("/bookings/{booking_id}/rate", response_model=schemas.RatingOut)
+def rate_booking(booking_id: int, body: schemas.RatingCreate, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    booking = _get_booking_for_user(booking_id, current_user, db)
+    if booking.status != "completed":
+        raise HTTPException(status_code=400, detail="Can only rate completed bookings")
+
+    is_renter = booking.renter_id == current_user.id
+    rated_role = "owner" if is_renter else "renter"
+    ratee_id = booking.listing.owner_id if is_renter else booking.renter_id
+
+    if db.query(models.Rating).filter(models.Rating.booking_id == booking.id, models.Rating.rated_role == rated_role).first():
+        raise HTTPException(status_code=400, detail="You already rated this booking")
+
+    rating = models.Rating(
+        booking_id=booking.id,
+        rater_id=current_user.id,
+        ratee_id=ratee_id,
+        rated_role=rated_role,
+        score=body.score,
+        comment=body.comment or "",
+    )
+    db.add(rating)
+
+    ratee = db.query(models.User).filter(models.User.id == ratee_id).first()
+    avg_field = f"rating_as_{rated_role}_avg"
+    count_field = f"rating_as_{rated_role}_count"
+    prev_avg, prev_count = getattr(ratee, avg_field), getattr(ratee, count_field)
+    new_count = prev_count + 1
+    new_avg = (prev_avg * prev_count + body.score) / new_count
+    setattr(ratee, avg_field, new_avg)
+    setattr(ratee, count_field, new_count)
+
+    db.commit()
+    db.refresh(rating)
+    return rating
+
+
+@app.get("/bookings/{booking_id}/ratings", response_model=list[schemas.RatingOut])
+def get_booking_ratings(booking_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    _get_booking_for_user(booking_id, current_user, db)
+    return db.query(models.Rating).filter(models.Rating.booking_id == booking_id).all()
