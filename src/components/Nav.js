@@ -1,21 +1,31 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { API_BASE_URL } from '../constants';
+import { apiFetch } from '../api';
 
 const LINKS = [
   { to: '/browse', label: 'Browse' },
   { to: '/my-listings', label: 'My Listings' },
   { to: '/my-bookings', label: 'My Bookings' },
+  { to: '/business', label: 'Business' },
   { to: '/dashboard', label: 'Dashboard' },
 ];
 
 export default function Nav({ onLogout }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    apiFetch(`${API_BASE_URL}/me`).then(r => r.ok ? r.json() : null).then(me => setIsAdmin(!!me?.is_admin));
+  }, []);
+
+  const links = isAdmin ? [...LINKS, { to: '/admin/revenue', label: 'Revenue' }] : LINKS;
 
   return (
-    <div className="max-w-5xl mx-auto flex items-center justify-between mb-6">
-      <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-2xl p-1">
-        {LINKS.map(link => (
+    <div className="max-w-5xl mx-auto flex items-center justify-between mb-6 flex-wrap gap-3">
+      <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-2xl p-1 flex-wrap">
+        {links.map(link => (
           <button
             key={link.to}
             onClick={() => navigate(link.to)}

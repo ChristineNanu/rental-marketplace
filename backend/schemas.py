@@ -86,6 +86,7 @@ class OwnerOut(BaseModel):
     id: int
     username: str
     full_name: str
+    is_business: bool
     rating_as_owner_avg: float
     rating_as_owner_count: int
 
@@ -104,6 +105,7 @@ class ListingOut(BaseModel):
     deposit_amount: float
     photos: str
     status: str
+    is_featured: bool
     created_at: datetime
     owner: OwnerOut
     category: CategoryOut
@@ -177,14 +179,47 @@ class DepositClaimRequest(BaseModel):
 
 class PaymentOut(BaseModel):
     id: int
-    booking_id: int
+    purpose: str
+    booking_id: Optional[int] = None
+    listing_id: Optional[int] = None
+    plan: Optional[str] = None
     phone: str
     rental_amount: float
     deposit_amount: float
     amount: float
+    platform_commission: float
     status: str
     mpesa_receipt: Optional[str] = None
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ─── MONETIZATION (featured listings + business tier) ────────────────────────
+
+class SubscribeRequest(BaseModel):
+    phone: str
+    plan: str  # pro | premium
+
+    @field_validator('phone')
+    @classmethod
+    def validate_phone(cls, v):
+        return _normalize_kenyan_phone(v)
+
+    @field_validator('plan')
+    @classmethod
+    def validate_plan(cls, v):
+        if v not in ("pro", "premium"):
+            raise ValueError('Plan must be "pro" or "premium"')
+        return v
+
+
+class SubscriptionOut(BaseModel):
+    plan: str
+    price_per_month: float
+    active: bool
+    current_period_end: Optional[datetime] = None
 
     class Config:
         from_attributes = True

@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Float, Text, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -85,12 +87,21 @@ class Listing(Base):
     deposit_amount = Column(Float, default=0.0)
     photos = Column(String, default="")  # comma-separated photo URLs
     status = Column(String, default="active")  # active | paused | deleted
+    featured_until = Column(DateTime(timezone=True), nullable=True)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     owner = relationship("User")
     category = relationship("Category")
     area = relationship("Area")
+
+    @property
+    def is_featured(self) -> bool:
+        if not self.featured_until:
+            return False
+        # SQLite round-trips DateTime(timezone=True) as naive — normalize before comparing.
+        until = self.featured_until if self.featured_until.tzinfo else self.featured_until.replace(tzinfo=timezone.utc)
+        return until > datetime.now(timezone.utc)
 
 
 class Booking(Base):
@@ -126,15 +137,24 @@ class Payment(Base):
     __tablename__ = "payments"
     __table_args__ = (
         Index("ix_payments_booking_id", "booking_id"),
+        Index("ix_payments_listing_id", "listing_id"),
         Index("ix_payments_checkout_request_id", "checkout_request_id"),
     )
     id = Column(Integer, primary_key=True, index=True)
-    booking_id = Column(Integer, ForeignKey("bookings.id"), index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))  # the renter who paid
+    # What this payment is for — dispatches how completion is handled (see
+    # _mark_payment_completed in main.py). Only one of booking_id/listing_id is set,
+    # matching purpose.
+    purpose = Column(String, default="booking")  # booking | feature | subscription
+    booking_id = Column(Integer, ForeignKey("bookings.id"), index=True, nullable=True)
+    listing_id = Column(Integer, ForeignKey("listings.id"), index=True, nullable=True)  # for purpose="feature"
+    plan = Column(String, nullable=True)  # for purpose="subscription": "pro" | "premium"
+    user_id = Column(Integer, ForeignKey("users.id"))  # whoever paid
     phone = Column(String)
-    rental_amount = Column(Float)
+    rental_amount = Column(Float, default=0.0)
     deposit_amount = Column(Float, default=0.0)
-    amount = Column(Float)  # rental_amount + deposit_amount — what STK actually charges
+    amount = Column(Float)  # what STK actually charges
+    # Platform's cut of rental_amount, computed on completion — booking payments only.
+    platform_commission = Column(Float, default=0.0)
     checkout_request_id = Column(String, nullable=True)
     merchant_request_id = Column(String, nullable=True)
     status = Column(String, default="pending")  # pending | completed | failed
@@ -142,6 +162,20 @@ class Payment(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     booking = relationship("Booking")
+    listing = relationship("Listing")
+    user = relationship("User")
+
+
+class BusinessSubscription(Base):
+    __tablename__ = "business_subscriptions"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, index=True)
+    plan = Column(String, default="pro")  # pro | premium
+    price_per_month = Column(Float, default=0.0)
+    active = Column(Boolean, default=True)
+    current_period_end = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
     user = relationship("User")
 
 

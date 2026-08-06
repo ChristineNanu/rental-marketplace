@@ -82,6 +82,9 @@ export default function ListingDetail({ onLogout }) {
               <p className="text-slate-400 font-bold uppercase text-xs">Owner</p>
               <p className="font-black text-slate-900">
                 {listing.owner.full_name || listing.owner.username}
+                {listing.owner.is_business && (
+                  <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-600 align-middle">BUSINESS</span>
+                )}
                 {listing.owner.rating_as_owner_count > 0 && (
                   <span className="text-slate-400 font-medium"> · {listing.owner.rating_as_owner_avg.toFixed(1)}★ ({listing.owner.rating_as_owner_count})</span>
                 )}

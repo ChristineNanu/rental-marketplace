@@ -61,8 +61,11 @@ export default function Browse({ onLogout }) {
               <div
                 key={listing.id}
                 onClick={() => navigate(`/listings/${listing.id}`)}
-                className="card p-5 cursor-pointer"
+                className={`card p-5 cursor-pointer relative ${listing.is_featured ? 'ring-2 ring-amber-400' : ''}`}
               >
+                {listing.is_featured && (
+                  <span className="absolute top-3 right-3 px-2 py-0.5 rounded-lg text-xs font-bold bg-amber-100 text-amber-700">★ Featured</span>
+                )}
                 <p className="text-xs font-black text-amber-600 uppercase tracking-widest mb-1">{listing.category.name}</p>
                 <h3 className="text-lg font-black text-slate-900 mb-1">{listing.title}</h3>
                 <p className="text-sm text-slate-500 mb-3 line-clamp-2">{listing.description || 'No description yet.'}</p>

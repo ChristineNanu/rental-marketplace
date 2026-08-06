@@ -8,6 +8,8 @@ import ListingDetail from './components/ListingDetail';
 import CreateListing from './components/CreateListing';
 import MyListings from './components/MyListings';
 import MyBookings from './components/MyBookings';
+import Business from './components/Business';
+import AdminRevenue from './components/AdminRevenue';
 import { clearAuth, getAccessToken } from './api';
 
 export default function App() {
@@ -30,6 +32,8 @@ export default function App() {
         <Route path="/listings/:id" element={isLoggedIn ? <ListingDetail onLogout={handleLogout} /> : <Navigate to="/login" replace />} />
         <Route path="/my-listings" element={isLoggedIn ? <MyListings onLogout={handleLogout} /> : <Navigate to="/login" replace />} />
         <Route path="/my-bookings" element={isLoggedIn ? <MyBookings onLogout={handleLogout} /> : <Navigate to="/login" replace />} />
+        <Route path="/business" element={isLoggedIn ? <Business onLogout={handleLogout} /> : <Navigate to="/login" replace />} />
+        <Route path="/admin/revenue" element={isLoggedIn ? <AdminRevenue onLogout={handleLogout} /> : <Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   );

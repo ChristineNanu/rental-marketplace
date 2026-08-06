@@ -4,6 +4,7 @@ import { API_BASE_URL } from '../constants';
 import { apiFetch } from '../api';
 import Nav from './Nav';
 import RatingModal from './RatingModal';
+import SimplePaymentModal from './SimplePaymentModal';
 
 const STATUS_STYLES = {
   requested: 'bg-amber-100 text-amber-700',
@@ -173,6 +174,7 @@ export default function MyListings({ onLogout }) {
   const navigate = useNavigate();
   const [listings, setListings] = useState(null);
   const [expanded, setExpanded] = useState(null);
+  const [featuringListing, setFeaturingListing] = useState(null);
 
   const load = () => apiFetch(`${API_BASE_URL}/my-listings`)
     .then(r => r.ok ? r.json() : [])
@@ -214,7 +216,10 @@ export default function MyListings({ onLogout }) {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs font-black text-amber-600 uppercase tracking-widest mb-1">{listing.category.name} · {listing.area.name}</p>
-                  <h3 className="text-lg font-black text-slate-900">{listing.title}</h3>
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                    {listing.title}
+                    {listing.is_featured && <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-amber-100 text-amber-700">★ Featured</span>}
+                  </h3>
                   <p className="text-sm text-slate-500">KES {listing.price_per_day.toLocaleString()}/day</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -229,17 +234,38 @@ export default function MyListings({ onLogout }) {
                   </button>
                 </div>
               </div>
-              <button
-                onClick={() => setExpanded(expanded === listing.id ? null : listing.id)}
-                className="text-xs font-bold text-amber-600 bg-transparent border-0 cursor-pointer mt-2"
-              >
-                {expanded === listing.id ? 'Hide requests ▲' : 'View requests ▼'}
-              </button>
+              <div className="flex items-center gap-3 mt-2">
+                <button
+                  onClick={() => setExpanded(expanded === listing.id ? null : listing.id)}
+                  className="text-xs font-bold text-amber-600 bg-transparent border-0 cursor-pointer"
+                >
+                  {expanded === listing.id ? 'Hide requests ▲' : 'View requests ▼'}
+                </button>
+                {!listing.is_featured && (
+                  <button
+                    onClick={() => setFeaturingListing(listing)}
+                    className="text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 rounded-lg px-2 py-1 cursor-pointer border-0"
+                  >
+                    ★ Feature for 7 days (KES 200)
+                  </button>
+                )}
+              </div>
               {expanded === listing.id && <RequestsPanel listingId={listing.id} onDepositResolved={load} />}
             </div>
           ))
         )}
       </div>
+
+      {featuringListing && (
+        <SimplePaymentModal
+          title={`Feature "${featuringListing.title}"`}
+          subtitle="Featured listings show first in Browse for 7 days."
+          amount={200}
+          payUrl={`/listings/${featuringListing.id}/feature`}
+          onCancel={() => setFeaturingListing(null)}
+          onSuccess={() => { setFeaturingListing(null); load(); }}
+        />
+      )}
     </div>
   );
 }

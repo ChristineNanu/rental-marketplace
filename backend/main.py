@@ -1,9 +1,10 @@
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import case
 from sqlalchemy.orm import Session, joinedload
 
 import models
@@ -13,6 +14,12 @@ from daraja import stk_push, query_stk_status, b2c_payout
 from database import get_db, engine
 
 models.Base.metadata.create_all(bind=engine)
+
+# ─── MONETIZATION CONSTANTS ───────────────────────────────────────────────────
+COMMISSION_RATE = 0.12  # platform's cut of the rental fee (not the deposit) on each booking
+FEATURE_PRICE_KES = 200
+FEATURE_DAYS = 7
+PLAN_PRICES = {"pro": 1000, "premium": 2500}  # KES/month
 
 app = FastAPI(title="Rental Marketplace API")
 
@@ -137,7 +144,14 @@ def browse_listings(
         query = query.filter(models.Listing.area_id == area_id)
     if q:
         query = query.filter(models.Listing.title.ilike(f"%{q}%"))
-    return query.order_by(models.Listing.created_at.desc()).all()
+    # SQLite stores DateTime(timezone=True) values as naive — bind a naive UTC
+    # timestamp here so the comparison matches what's actually on disk.
+    now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+    featured_rank = case(
+        (models.Listing.featured_until > now_naive, 0),
+        else_=1,
+    )
+    return query.order_by(featured_rank, models.Listing.created_at.desc()).all()
 
 
 @app.get("/my-listings", response_model=list[schemas.ListingOut])
@@ -334,6 +348,7 @@ def pay_for_booking(booking_id: int, body: schemas.PaymentRequest, current_user:
         raise HTTPException(status_code=400, detail=result.get("errorMessage", "STK Push failed"))
 
     payment = models.Payment(
+        purpose="booking",
         booking_id=booking.id,
         user_id=current_user.id,
         phone=body.phone,
@@ -355,14 +370,48 @@ def pay_for_booking(booking_id: int, body: schemas.PaymentRequest, current_user:
     }
 
 
+def _extend_from(current_end: Optional[datetime], days: int) -> datetime:
+    """Stack a renewal on top of remaining time rather than resetting the clock —
+    paying for another 7 days of featuring while 3 are left should give 10, not 7."""
+    now = datetime.now(timezone.utc)
+    base = current_end
+    if base and base.tzinfo is None:
+        base = base.replace(tzinfo=timezone.utc)
+    if not base or base < now:
+        base = now
+    return base + timedelta(days=days)
+
+
 def _mark_payment_completed(payment: models.Payment, db: Session, mpesa_receipt: Optional[str] = None):
     payment.status = "completed"
     payment.mpesa_receipt = mpesa_receipt or payment.mpesa_receipt
-    booking = payment.booking or db.query(models.Booking).filter(models.Booking.id == payment.booking_id).first()
-    if booking:
-        booking.payment_status = "paid"
-        if booking.deposit_amount > 0:
-            booking.deposit_status = "held"
+
+    if payment.purpose == "booking":
+        booking = payment.booking or db.query(models.Booking).filter(models.Booking.id == payment.booking_id).first()
+        if booking:
+            booking.payment_status = "paid"
+            payment.platform_commission = round(payment.rental_amount * COMMISSION_RATE, 2)
+            if booking.deposit_amount > 0:
+                booking.deposit_status = "held"
+
+    elif payment.purpose == "feature":
+        listing = payment.listing or db.query(models.Listing).filter(models.Listing.id == payment.listing_id).first()
+        if listing:
+            listing.featured_until = _extend_from(listing.featured_until, FEATURE_DAYS)
+
+    elif payment.purpose == "subscription":
+        sub = db.query(models.BusinessSubscription).filter(models.BusinessSubscription.user_id == payment.user_id).first()
+        if not sub:
+            sub = models.BusinessSubscription(user_id=payment.user_id)
+            db.add(sub)
+        sub.plan = payment.plan
+        sub.price_per_month = PLAN_PRICES.get(payment.plan, sub.price_per_month)
+        sub.active = True
+        sub.current_period_end = _extend_from(sub.current_period_end, 30)
+        user = db.query(models.User).filter(models.User.id == payment.user_id).first()
+        if user:
+            user.is_business = True
+
     db.commit()
 
 
@@ -528,3 +577,116 @@ def rate_booking(booking_id: int, body: schemas.RatingCreate, current_user: mode
 def get_booking_ratings(booking_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
     _get_booking_for_user(booking_id, current_user, db)
     return db.query(models.Rating).filter(models.Rating.booking_id == booking_id).all()
+
+
+# ─── FEATURED LISTINGS ────────────────────────────────────────────────────────
+
+@app.post("/listings/{listing_id}/feature")
+def feature_listing(listing_id: int, body: schemas.PaymentRequest, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    listing = _get_owned_listing(listing_id, current_user, db)
+
+    try:
+        result = stk_push(
+            phone=body.phone,
+            amount=FEATURE_PRICE_KES,
+            account_ref=f"FEATURE-{listing.id}",
+            description=f"Feature listing #{listing.id} for {FEATURE_DAYS} days",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"M-PESA error: {str(e)}")
+
+    if result.get("ResponseCode") != "0":
+        raise HTTPException(status_code=400, detail=result.get("errorMessage", "STK Push failed"))
+
+    payment = models.Payment(
+        purpose="feature",
+        listing_id=listing.id,
+        user_id=current_user.id,
+        phone=body.phone,
+        amount=FEATURE_PRICE_KES,
+        checkout_request_id=result.get("CheckoutRequestID"),
+        merchant_request_id=result.get("MerchantRequestID"),
+        status="pending",
+    )
+    db.add(payment)
+    db.commit()
+    db.refresh(payment)
+
+    return {
+        "message": "STK Push sent! Check your phone and enter your M-PESA PIN.",
+        "checkout_request_id": result.get("CheckoutRequestID"),
+        "payment_id": payment.id,
+    }
+
+
+# ─── BUSINESS SUBSCRIPTIONS ───────────────────────────────────────────────────
+
+@app.get("/business/subscription", response_model=schemas.SubscriptionOut)
+def get_subscription(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    sub = db.query(models.BusinessSubscription).filter(models.BusinessSubscription.user_id == current_user.id).first()
+    if not sub:
+        return schemas.SubscriptionOut(plan="free", price_per_month=0.0, active=False, current_period_end=None)
+    return sub
+
+
+@app.post("/business/subscribe")
+def subscribe(body: schemas.SubscribeRequest, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    price = PLAN_PRICES[body.plan]
+
+    try:
+        result = stk_push(
+            phone=body.phone,
+            amount=price,
+            account_ref=f"SUBSCRIBE-{current_user.id}",
+            description=f"{body.plan.title()} plan — monthly subscription",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"M-PESA error: {str(e)}")
+
+    if result.get("ResponseCode") != "0":
+        raise HTTPException(status_code=400, detail=result.get("errorMessage", "STK Push failed"))
+
+    payment = models.Payment(
+        purpose="subscription",
+        plan=body.plan,
+        user_id=current_user.id,
+        phone=body.phone,
+        amount=price,
+        checkout_request_id=result.get("CheckoutRequestID"),
+        merchant_request_id=result.get("MerchantRequestID"),
+        status="pending",
+    )
+    db.add(payment)
+    db.commit()
+    db.refresh(payment)
+
+    return {
+        "message": "STK Push sent! Check your phone and enter your M-PESA PIN.",
+        "checkout_request_id": result.get("CheckoutRequestID"),
+        "payment_id": payment.id,
+    }
+
+
+# ─── ADMIN REVENUE ─────────────────────────────────────────────────────────────
+
+@app.get("/admin/revenue")
+def admin_revenue(current_user: models.User = Depends(auth.require_admin), db: Session = Depends(get_db)):
+    completed = db.query(models.Payment).filter(models.Payment.status == "completed")
+    booking_payments = completed.filter(models.Payment.purpose == "booking").all()
+    feature_payments = completed.filter(models.Payment.purpose == "feature").all()
+    subscription_payments = completed.filter(models.Payment.purpose == "subscription").all()
+
+    return {
+        "commission_kes": sum(p.platform_commission for p in booking_payments),
+        "commission_transaction_count": len(booking_payments),
+        "gross_rental_kes": sum(p.rental_amount for p in booking_payments),
+        "featured_listing_revenue_kes": sum(p.amount for p in feature_payments),
+        "featured_listing_count": len(feature_payments),
+        "subscription_revenue_kes": sum(p.amount for p in subscription_payments),
+        "active_business_subscriptions": db.query(models.BusinessSubscription).filter(models.BusinessSubscription.active == True).count(),  # noqa: E712
+        "total_platform_revenue_kes": (
+            sum(p.platform_commission for p in booking_payments)
+            + sum(p.amount for p in feature_payments)
+            + sum(p.amount for p in subscription_payments)
+        ),
+    }
