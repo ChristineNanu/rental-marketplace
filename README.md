@@ -1,6 +1,6 @@
 # RentIt Nairobi 📦
 
-A peer-to-peer rental marketplace for Nairobi — "Airbnb for stuff." List tools, camping gear, event equipment, spare rooms, and parking spots for short-term rent instead of buying what you'll use once. Built with React and FastAPI, reusing the M-Pesa/JWT-auth foundation proven in [RescueMePets](../RescueMePets), with M-Pesa deposit escrow, a two-way rating system, and platform monetization (commission, featured listings, business subscriptions) layered on top.
+A peer-to-peer rental marketplace for Nairobi — "Airbnb for stuff." List tools, camping gear, event equipment, spare rooms, and parking spots for short-term rent instead of buying what you'll use once. Built with React and FastAPI, reusing the M-Pesa/JWT-auth foundation , with M-Pesa deposit escrow, a two-way rating system, and platform monetization (commission, featured listings, business subscriptions) layered on top.
 
 ---
 
@@ -312,7 +312,7 @@ npm install
 npm start
 ```
 
-Frontend runs at `http://localhost:3001` (port 3000 is reserved for RescueMePets in local dev — see `src/constants.js` / CORS config in `backend/main.py` if you need to change this).
+Frontend runs at `http://localhost:3001`
 
 ---
 
