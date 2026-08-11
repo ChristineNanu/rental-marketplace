@@ -1,6 +1,7 @@
 """One-off seed script for Areas and Categories. Run with: python seed_data.py"""
 import models
 from database import SessionLocal, engine
+import auth as auth_module
 
 models.Base.metadata.create_all(bind=engine)
 db = SessionLocal()
@@ -42,7 +43,7 @@ if not demo:
     demo = models.User(
         username="demo_owner",
         email="demo_owner@example.com",
-        password="$2b$12$KIXQ8s8u1o3n8b7l0m0k0.notarealhashjustseeddata000000",
+        password=auth_module.get_password_hash("demo1234"),
         full_name="Demo Owner",
     )
     db.add(demo)

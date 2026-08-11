@@ -1,12 +1,12 @@
 import os
-import uuid
+import cloudinary
+import cloudinary.uploader
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import FastAPI, Depends, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from sqlalchemy import case
+from sqlalchemy import case, or_
 from sqlalchemy.orm import Session, joinedload
 
 import models
@@ -36,6 +36,14 @@ def _seed_admin():
 
 _seed_admin()
 
+# ─── CLOUDINARY ───────────────────────────────────────────────────────────────
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+    secure=True,
+)
+
 # ─── MONETIZATION CONSTANTS ───────────────────────────────────────────────────
 COMMISSION_RATE = 0.12  # platform's cut of the rental fee (not the deposit) on each booking
 FEATURE_PRICE_KES = 200
@@ -57,10 +65,6 @@ app.add_middleware(
 )
 
 
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
-
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
 
@@ -80,11 +84,16 @@ async def upload_image(
     data = await file.read()
     if len(data) > MAX_IMAGE_SIZE:
         raise HTTPException(status_code=400, detail="Image must be under 5 MB")
-    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "jpg"
-    filename = f"{uuid.uuid4().hex}.{ext}"
-    with open(os.path.join(UPLOAD_DIR, filename), "wb") as f:
-        f.write(data)
-    return {"url": f"/uploads/{filename}"}
+    try:
+        result = cloudinary.uploader.upload(
+            data,
+            folder="rentit",
+            resource_type="image",
+            format=file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "jpg",
+        )
+        return {"url": result["secure_url"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
 
 
 # ─── AUTH ────────────────────────────────────────────────────────────────────
@@ -181,6 +190,8 @@ def browse_listings(
     category_id: Optional[int] = None,
     area_id: Optional[int] = None,
     q: Optional[str] = None,
+    limit: int = 40,
+    offset: int = 0,
     db: Session = Depends(get_db),
 ):
     query = _listing_query(db).filter(models.Listing.status == "active")
@@ -189,15 +200,18 @@ def browse_listings(
     if area_id is not None:
         query = query.filter(models.Listing.area_id == area_id)
     if q:
-        query = query.filter(models.Listing.title.ilike(f"%{q}%"))
-    # SQLite stores DateTime(timezone=True) values as naive — bind a naive UTC
-    # timestamp here so the comparison matches what's actually on disk.
+        query = query.filter(
+            or_(
+                models.Listing.title.ilike(f"%{q}%"),
+                models.Listing.description.ilike(f"%{q}%"),
+            )
+        )
     now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
     featured_rank = case(
         (models.Listing.featured_until > now_naive, 0),
         else_=1,
     )
-    return query.order_by(featured_rank, models.Listing.created_at.desc()).all()
+    return query.order_by(featured_rank, models.Listing.created_at.desc()).offset(offset).limit(limit).all()
 
 
 @app.get("/my-listings", response_model=list[schemas.ListingOut])
@@ -254,6 +268,19 @@ def delete_listing(listing_id: int, current_user: models.User = Depends(auth.get
     listing.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return {"message": "Listing removed"}
+
+
+@app.get("/listings/{listing_id}/booked-dates")
+def get_booked_dates(listing_id: int, db: Session = Depends(get_db)):
+    bookings = db.query(models.Booking).filter(
+        models.Booking.listing_id == listing_id,
+        models.Booking.status.in_(["requested", "accepted"]),
+    ).all()
+    return [
+        {"start": b.start_date.isoformat() if b.start_date else None,
+         "end": b.end_date.isoformat() if b.end_date else None}
+        for b in bookings
+    ]
 
 
 # ─── BOOKINGS ────────────────────────────────────────────────────────────────
@@ -746,3 +773,22 @@ def admin_revenue(current_user: models.User = Depends(auth.require_admin), db: S
             + sum(p.amount for p in subscription_payments)
         ),
     }
+
+
+@app.get("/admin/deposit-claims")
+def admin_deposit_claims(current_user: models.User = Depends(auth.require_admin), db: Session = Depends(get_db)):
+    bookings = db.query(models.Booking).options(
+        joinedload(models.Booking.listing),
+        joinedload(models.Booking.renter),
+    ).filter(models.Booking.deposit_status.in_(["claimed", "released"])).order_by(models.Booking.id.desc()).all()
+    return [
+        {
+            "booking_id": b.id,
+            "listing_title": b.listing.title if b.listing else None,
+            "renter": b.renter.username if b.renter else None,
+            "deposit_amount": b.deposit_amount,
+            "deposit_status": b.deposit_status,
+            "deposit_claim_reason": b.deposit_claim_reason,
+        }
+        for b in bookings
+    ]

@@ -9,11 +9,18 @@ export default function Dashboard({ onLogout }) {
   const [me, setMe] = useState(null);
   const [listings, setListings] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
-    apiFetch(`${API_BASE_URL}/me`).then(r => r.ok ? r.json() : null).then(setMe);
-    apiFetch(`${API_BASE_URL}/my-listings`).then(r => r.ok ? r.json() : []).then(setListings);
-    apiFetch(`${API_BASE_URL}/my-bookings`).then(r => r.ok ? r.json() : []).then(setBookings);
+    Promise.all([
+      apiFetch(`${API_BASE_URL}/me`).then(r => r.ok ? r.json() : null),
+      apiFetch(`${API_BASE_URL}/my-listings`).then(r => r.ok ? r.json() : []),
+      apiFetch(`${API_BASE_URL}/my-bookings`).then(r => r.ok ? r.json() : []),
+    ]).then(([meData, listingsData, bookingsData]) => {
+      setMe(meData);
+      setListings(listingsData);
+      setBookings(bookingsData);
+    }).catch(() => setError(true));
   }, []);
 
   const pendingRequests = bookings.filter(b => b.status === 'requested').length;
@@ -21,8 +28,13 @@ export default function Dashboard({ onLogout }) {
 
   return (
     <div className="page-bg min-h-screen p-8">
-      <Nav onLogout={onLogout} />
+      <Nav onLogout={onLogout} isLoggedIn={true} />
       <div className="max-w-4xl mx-auto space-y-6">
+        {error && (
+          <div className="card-static p-4 bg-red-50 border border-red-100 text-sm text-red-600 font-semibold">
+            Could not load your data. Check your connection and refresh.
+          </div>
+        )}
         <div className="card-static p-8 bg-gradient-to-br from-amber-500 to-amber-600 border-0 text-white">
           <p className="text-amber-100 text-sm font-bold uppercase tracking-widest mb-1">Welcome back</p>
           <h1 className="text-3xl font-black mb-4">

@@ -350,7 +350,7 @@ export default function MyListings({ onLogout }) {
 
   return (
     <div className="page-bg min-h-screen p-8">
-      <Nav onLogout={onLogout} />
+      <Nav onLogout={onLogout} isLoggedIn={true} />
       <div className="max-w-4xl mx-auto space-y-4">
         <h1 className="text-2xl font-black text-slate-900">My Listings</h1>
 

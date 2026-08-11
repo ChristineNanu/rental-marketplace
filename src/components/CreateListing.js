@@ -122,7 +122,7 @@ export default function CreateListing({ onLogout }) {
 
   return (
     <div className="page-bg min-h-screen p-8">
-      <Nav onLogout={onLogout} />
+      <Nav onLogout={onLogout} isLoggedIn={true} />
       <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-6 items-start">
         <div className="card-static p-8">
           <h1 className="text-2xl font-black text-slate-900 mb-1">List an item or space</h1>
