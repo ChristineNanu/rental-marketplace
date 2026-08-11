@@ -663,7 +663,17 @@ def get_booking_ratings(booking_id: int, current_user: models.User = Depends(aut
     return db.query(models.Rating).filter(models.Rating.booking_id == booking_id).all()
 
 
-# ─── BOOKING MESSAGES ─────────────────────────────────────────────────────────
+# ─── BOOKING MESSAGES ─────────────────────────────────────────────────────────────────────────────────
+
+def _msg_is_read_by(msg, user_id: int) -> bool:
+    return str(user_id) in (msg.read_by or "").split(",")
+
+def _mark_msg_read(msg, user_id: int):
+    ids = [x for x in (msg.read_by or "").split(",") if x]
+    if str(user_id) not in ids:
+        ids.append(str(user_id))
+        msg.read_by = ",".join(ids)
+
 
 @app.get("/bookings/{booking_id}/messages")
 def get_booking_messages(booking_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
@@ -671,6 +681,9 @@ def get_booking_messages(booking_id: int, current_user: models.User = Depends(au
     msgs = db.query(models.BookingMessage).filter(
         models.BookingMessage.booking_id == booking_id
     ).order_by(models.BookingMessage.created_at).all()
+    for m in msgs:
+        _mark_msg_read(m, current_user.id)
+    db.commit()
     return [
         {
             "id": m.id,
@@ -691,7 +704,8 @@ def send_booking_message(booking_id: int, body: dict, current_user: models.User 
     text = (body.get("body") or "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
-    msg = models.BookingMessage(booking_id=booking_id, sender_id=current_user.id, body=text)
+    msg = models.BookingMessage(booking_id=booking_id, sender_id=current_user.id, body=text,
+                                read_by=str(current_user.id))
     db.add(msg)
     db.commit()
     db.refresh(msg)
@@ -705,6 +719,37 @@ def send_booking_message(booking_id: int, body: dict, current_user: models.User 
         "is_mine": True,
     }
 
+
+@app.get("/messages/unread")
+def get_unread_messages(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    from sqlalchemy import or_
+    booking_ids = db.query(models.Booking.id).join(models.Listing).filter(
+        or_(
+            models.Booking.renter_id == current_user.id,
+            models.Listing.owner_id == current_user.id,
+        ),
+        models.Booking.status.in_(["requested", "accepted", "completed"])
+    ).all()
+    booking_ids = [b.id for b in booking_ids]
+    results = []
+    for bid in booking_ids:
+        unread = [m for m in db.query(models.BookingMessage).filter(
+            models.BookingMessage.booking_id == bid,
+            models.BookingMessage.sender_id != current_user.id,
+        ).all() if not _msg_is_read_by(m, current_user.id)]
+        if unread:
+            latest = max(unread, key=lambda m: m.created_at)
+            booking = db.query(models.Booking).filter(models.Booking.id == bid).first()
+            results.append({
+                "booking_id": bid,
+                "listing_title": booking.listing.title,
+                "unread_count": len(unread),
+                "latest_body": latest.body[:80],
+                "latest_sender": latest.sender.full_name or latest.sender.username,
+                "latest_at": latest.created_at.isoformat(),
+            })
+    results.sort(key=lambda x: x["latest_at"], reverse=True)
+    return results
 
 
 

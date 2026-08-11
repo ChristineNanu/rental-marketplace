@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../constants';
 import ListingThumb from './ListingThumb';
@@ -24,22 +24,6 @@ const TRUST_STATS = [
   { value: '2-way', label: 'Rating system' },
   { value: 'M-Pesa', label: 'Secure payments' },
 ];
-
-function useCountUp(target, duration = 1200, start = false) {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    if (!start || typeof target !== 'number') return;
-    let startTime = null;
-    const step = (ts) => {
-      if (!startTime) startTime = ts;
-      const progress = Math.min((ts - startTime) / duration, 1);
-      setCount(Math.floor(progress * target));
-      if (progress < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  }, [target, duration, start]);
-  return count;
-}
 
 function FeaturedCard({ listing, onClick, delay }) {
   return (
@@ -78,7 +62,7 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const [featured, setFeatured] = useState([]);
   const statsRef = useRef(null);
-  const [statsVisible, setStatsVisible] = useState(false);
+  const [, setStatsVisible] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/listings?limit=6`)

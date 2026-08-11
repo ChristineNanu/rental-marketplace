@@ -185,6 +185,7 @@ class BookingMessage(Base):
     booking_id = Column(Integer, ForeignKey("bookings.id"), index=True)
     sender_id = Column(Integer, ForeignKey("users.id"))
     body = Column(Text)
+    read_by = Column(String, default="")  # comma-separated user IDs who have read this
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     booking = relationship("Booking")

@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { apiFetch } from '../api';
+import { API_BASE_URL } from '../constants';
+import MessageBell from './MessageBell';
+import BookingChat from './BookingChat';
 
 const LINKS = [
   { to: '/browse',      label: 'Browse',      icon: '🔍' },
@@ -17,6 +20,28 @@ export default function Nav({ onLogout, isLoggedIn }) {
   const location = useLocation();
   const [isAdmin, setIsAdmin] = useState(!!_meCache?.is_admin);
   const [scrolled, setScrolled] = useState(false);
+  const [chatBooking, setChatBooking] = useState(null);
+
+  const openChatForBooking = async (bookingId) => {
+    const res = await apiFetch(`${API_BASE_URL}/my-bookings`);
+    if (res.ok) {
+      const bookings = await res.json();
+      const found = bookings.find(b => b.id === bookingId);
+      if (found) { setChatBooking(found); return; }
+    }
+    const res2 = await apiFetch(`${API_BASE_URL}/my-listings`);
+    if (res2.ok) {
+      const listings = await res2.json();
+      for (const l of listings) {
+        const r = await apiFetch(`${API_BASE_URL}/listings/${l.id}/bookings`);
+        if (r.ok) {
+          const bks = await r.json();
+          const found = bks.find(b => b.id === bookingId);
+          if (found) { setChatBooking(found); return; }
+        }
+      }
+    }
+  };
 
   useEffect(() => {
     if (!isLoggedIn || _meCache) return;
@@ -82,6 +107,7 @@ export default function Nav({ onLogout, isLoggedIn }) {
 
           {/* Actions */}
           <div className="flex items-center gap-2">
+            {isLoggedIn && <MessageBell onOpenChat={openChatForBooking} />}
             {isLoggedIn ? (
               <>
                 <button
@@ -132,6 +158,9 @@ export default function Nav({ onLogout, isLoggedIn }) {
           </div>
         )}
       </div>
+      {chatBooking && (
+        <BookingChat booking={chatBooking} onClose={() => setChatBooking(null)} />
+      )}
     </div>
   );
 }
