@@ -59,6 +59,13 @@ def rate_limit(request: Request, key_prefix: str, max_attempts: int, window_seco
     hits.append(now)
 
 
+def rate_limit_reset(request: Request, key_prefix: str):
+    """Clear the rate-limit counter for this IP on successful auth — so switching
+    accounts doesn't burn through the window from previous failed attempts."""
+    ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    _rate_limit_hits[f"{key_prefix}:{ip}"].clear()
+
+
 def create_access_token(user: models.User) -> str:
     now = datetime.now(timezone.utc)
     payload = {

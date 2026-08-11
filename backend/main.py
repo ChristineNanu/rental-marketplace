@@ -119,12 +119,13 @@ def register(user: schemas.UserCreate, request: Request, db: Session = Depends(g
 
 @app.post("/login")
 def login(user: schemas.UserLogin, request: Request, db: Session = Depends(get_db)):
-    auth.rate_limit(request, "login", max_attempts=8, window_seconds=900)
+    auth.rate_limit(request, "login", max_attempts=30, window_seconds=900)
     db_user = db.query(models.User).filter(models.User.username == user.username).first()
     if not db_user:
         raise HTTPException(status_code=400, detail="Username not found. Please check your username or register.")
     if not auth.verify_password(user.password, db_user.password):
         raise HTTPException(status_code=400, detail="Incorrect password. Please try again.")
+    auth.rate_limit_reset(request, "login")  # clear counter on success
     tokens = auth.create_token_pair(db_user, db)
     return {
         "message": "Login successful",
