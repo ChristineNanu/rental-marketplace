@@ -2,35 +2,161 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
 @layer base {
-  body { background: #fffbeb; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  body {
+    background: #fffbeb;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
 }
 
 @layer utilities {
   .page-bg {
-    @apply min-h-screen bg-gradient-to-br from-amber-50/60 via-white to-slate-50;
+    @apply min-h-screen;
+    background: linear-gradient(135deg, #fffbeb 0%, #ffffff 40%, #f8fafc 100%);
   }
+
   .btn-primary {
-    @apply bg-gradient-to-r from-amber-500 to-amber-600 text-white font-bold rounded-2xl
-           hover:from-amber-600 hover:to-amber-700 hover:-translate-y-0.5
-           hover:shadow-lg hover:shadow-amber-200 transition-all duration-200
-           border-0 cursor-pointer active:scale-95;
+    @apply relative overflow-hidden bg-gradient-to-r from-amber-500 to-amber-600 text-white font-bold rounded-2xl
+           hover:-translate-y-0.5 hover:shadow-xl hover:shadow-amber-300/40
+           transition-all duration-200 border-0 cursor-pointer active:scale-95
+           focus:outline-none focus:ring-4 focus:ring-amber-300/50;
   }
+  .btn-primary::after {
+    content: '';
+    @apply absolute inset-0 bg-white/0 hover:bg-white/10 transition-colors duration-200 rounded-2xl;
+  }
+
+  .btn-ghost {
+    @apply font-bold text-slate-600 bg-white/80 backdrop-blur-sm border border-slate-200/80
+           rounded-2xl hover:bg-white hover:border-slate-300 hover:-translate-y-0.5
+           hover:shadow-md transition-all duration-200 cursor-pointer active:scale-95;
+  }
+
   .card {
-    @apply bg-white rounded-3xl border border-slate-100 shadow-card
-           hover:shadow-card-hover transition-all duration-300;
+    @apply bg-white/90 backdrop-blur-sm rounded-3xl border border-white/60
+           shadow-[0_4px_24px_-4px_rgba(0,0,0,0.08)]
+           hover:shadow-[0_20px_60px_-10px_rgba(0,0,0,0.15)]
+           hover:-translate-y-1 transition-all duration-300;
   }
-  .input-field {
-    @apply w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-white text-slate-800
-           focus:border-amber-400 focus:outline-none focus:ring-4 focus:ring-amber-100
-           transition-all duration-200 placeholder:text-slate-400 text-sm font-medium;
-  }
-  /* Same surface as .card but without the hover lift — for info/stat panels that
-     aren't clickable, where the lift-on-hover affordance would be misleading. */
+
   .card-static {
-    @apply bg-white rounded-3xl border border-slate-100 shadow-card;
+    @apply bg-white/90 backdrop-blur-sm rounded-3xl border border-white/60
+           shadow-[0_4px_24px_-4px_rgba(0,0,0,0.08)];
   }
+
+  .glass {
+    @apply bg-white/70 backdrop-blur-xl border border-white/50
+           shadow-[0_8px_32px_rgba(0,0,0,0.08)] rounded-3xl;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl border-2 border-slate-200/80 bg-white/80 text-slate-800
+           focus:border-amber-400 focus:outline-none focus:ring-4 focus:ring-amber-100
+           transition-all duration-200 placeholder:text-slate-400 text-sm font-medium
+           hover:border-slate-300;
+  }
+
   .img-placeholder {
-    @apply bg-gradient-to-br from-amber-100 via-amber-50 to-slate-100 flex items-center justify-center text-slate-300;
+    @apply flex items-center justify-center text-slate-300;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 50%, #e2e8f0 100%);
+  }
+
+  /* Shimmer skeleton */
+  .skeleton {
+    @apply bg-slate-100 rounded-xl overflow-hidden relative;
+  }
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.6) 50%, transparent 100%);
+    animation: shimmer 1.5s infinite;
+  }
+
+  /* Stat number pop */
+  .stat-number {
+    @apply text-3xl font-black text-slate-900 tabular-nums;
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold;
   }
 }
+
+/* ── Keyframe animations ─────────────────────────────────────────────────── */
+
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-8px); }
+}
+
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(245,158,11,0.4); }
+  70%  { box-shadow: 0 0 0 12px rgba(245,158,11,0); }
+  100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); }
+}
+
+@keyframes gradientShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Animation utility classes ───────────────────────────────────────────── */
+
+.animate-fade-up        { animation: fadeUp 0.5s ease both; }
+.animate-fade-in        { animation: fadeIn 0.4s ease both; }
+.animate-scale-in       { animation: scaleIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
+.animate-slide-down     { animation: slideDown 0.3s ease both; }
+.animate-float          { animation: float 3s ease-in-out infinite; }
+.animate-pulse-ring     { animation: pulse-ring 2s ease-out infinite; }
+.animate-gradient       { animation: gradientShift 4s ease infinite; background-size: 200% 200%; }
+.animate-spin-slow      { animation: spin-slow 8s linear infinite; }
+
+/* Staggered children */
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 60ms; }
+.stagger > *:nth-child(3) { animation-delay: 120ms; }
+.stagger > *:nth-child(4) { animation-delay: 180ms; }
+.stagger > *:nth-child(5) { animation-delay: 240ms; }
+.stagger > *:nth-child(6) { animation-delay: 300ms; }
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
