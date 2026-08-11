@@ -34,7 +34,7 @@ function PhotoUploader({ photoUrls, onChange }) {
       try {
         const res = await apiFetch('/upload-image', { method: 'POST', body: form });
         const data = await res.json();
-        if (res.ok) uploaded.push(`${API_BASE_URL}${data.url}`);
+        if (res.ok) uploaded.push(data.url);
       } catch { /* skip */ }
     }
     onChange([...photoUrls, ...uploaded]);
