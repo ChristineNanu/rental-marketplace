@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { API_BASE_URL } from '../constants';
 import { apiFetch } from '../api';
 
@@ -53,8 +54,8 @@ export default function BookingChat({ booking, onClose }) {
       ' · ' + d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-fade-in">
+  const modal = (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-[9999] animate-fade-in">
       <div className="w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col animate-slide-up" style={{ maxHeight: '90vh' }}>
 
         {/* Header */}
@@ -149,4 +150,6 @@ export default function BookingChat({ booking, onClose }) {
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }
