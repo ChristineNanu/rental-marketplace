@@ -21,7 +21,87 @@ const DEPOSIT_LABELS = {
   claimed: 'Deposit claimed',
 };
 
-function ClaimDepositModal({ booking, onCancel, onSuccess }) {
+function EditListingModal({ listing, onCancel, onSuccess }) {
+  const [areas, setAreas] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [form, setForm] = useState({
+    title: listing.title,
+    description: listing.description,
+    category_id: listing.category_id,
+    area_id: listing.area_id,
+    price_per_day: listing.price_per_day,
+    deposit_amount: listing.deposit_amount,
+  });
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    apiFetch('/areas').then(r => r.json()).then(setAreas);
+    apiFetch('/categories').then(r => r.json()).then(setCategories);
+  }, []);
+
+  const update = field => e => setForm(f => ({ ...f, [field]: e.target.value }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(''); setSubmitting(true);
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/listings/${listing.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...form,
+          category_id: Number(form.category_id),
+          area_id: Number(form.area_id),
+          price_per_day: Number(form.price_per_day),
+          deposit_amount: Number(form.deposit_amount || 0),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onSuccess();
+      } else {
+        setError(data.detail || 'Could not update listing.');
+      }
+    } catch {
+      setError('Connection error. Is the backend running?');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+      <div className="card p-8 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <p className="text-xs font-black text-amber-600 uppercase tracking-widest mb-1">Edit listing</p>
+        <h2 className="text-xl font-black text-slate-900 mb-6">{listing.title}</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input className="input-field" placeholder="Title" value={form.title} onChange={update('title')} required />
+          <textarea className="input-field" rows={3} placeholder="Description" value={form.description} onChange={update('description')} />
+          <div className="flex flex-col sm:flex-row gap-3">
+            <select className="input-field" value={form.category_id} onChange={update('category_id')} required>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <select className="input-field" value={form.area_id} onChange={update('area_id')} required>
+              {areas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input className="input-field" type="number" min="0" step="1" placeholder="Price/day (KES)" value={form.price_per_day} onChange={update('price_per_day')} required />
+            <input className="input-field" type="number" min="0" step="1" placeholder="Deposit (KES)" value={form.deposit_amount} onChange={update('deposit_amount')} />
+          </div>
+          {error && <p className="text-sm text-red-600 font-semibold">{error}</p>}
+          <button type="submit" disabled={submitting} className="btn-primary w-full py-3">
+            {submitting ? 'Saving...' : 'Save changes'}
+          </button>
+          <button type="button" onClick={onCancel} className="w-full text-sm font-bold text-slate-500 bg-transparent border-0 cursor-pointer py-1">Cancel</button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+{ booking, onCancel, onSuccess }) {
   const [phone, setPhone] = useState('');
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
@@ -176,6 +256,7 @@ export default function MyListings({ onLogout }) {
   const [listings, setListings] = useState(null);
   const [expanded, setExpanded] = useState(null);
   const [featuringListing, setFeaturingListing] = useState(null);
+  const [editingListing, setEditingListing] = useState(null);
 
   const load = () => apiFetch(`${API_BASE_URL}/my-listings`)
     .then(r => r.ok ? r.json() : [])
@@ -229,6 +310,9 @@ export default function MyListings({ onLogout }) {
                     <span className={`px-2 py-1 rounded-lg text-xs font-bold ${listing.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                       {listing.status}
                     </span>
+                    <button onClick={() => setEditingListing(listing)} className="text-xs font-bold text-slate-500 bg-white border border-slate-200 rounded-lg px-2 py-1 cursor-pointer">
+                      Edit
+                    </button>
                     <button onClick={() => togglePause(listing)} className="text-xs font-bold text-slate-500 bg-white border border-slate-200 rounded-lg px-2 py-1 cursor-pointer">
                       {listing.status === 'active' ? 'Pause' : 'Reactivate'}
                     </button>
@@ -259,6 +343,14 @@ export default function MyListings({ onLogout }) {
           ))
         )}
       </div>
+
+      {editingListing && (
+        <EditListingModal
+          listing={editingListing}
+          onCancel={() => setEditingListing(null)}
+          onSuccess={() => { setEditingListing(null); load(); }}
+        />
+      )}
 
       {featuringListing && (
         <SimplePaymentModal

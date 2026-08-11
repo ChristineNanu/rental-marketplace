@@ -15,6 +15,25 @@ from database import get_db, engine
 
 models.Base.metadata.create_all(bind=engine)
 
+# ─── STARTUP: seed admin account if none exists ───────────────────────────────
+def _seed_admin():
+    db = next(get_db())
+    try:
+        if not db.query(models.User).filter(models.User.is_admin == True).first():  # noqa: E712
+            db.add(models.User(
+                username="admin",
+                email="admin@rentitnairobi.local",
+                password=auth.get_password_hash("admin1234"),
+                full_name="Admin",
+                is_admin=True,
+            ))
+            db.commit()
+            print("Admin account seeded: username=admin password=admin1234")
+    finally:
+        db.close()
+
+_seed_admin()
+
 # ─── MONETIZATION CONSTANTS ───────────────────────────────────────────────────
 COMMISSION_RATE = 0.12  # platform's cut of the rental fee (not the deposit) on each booking
 FEATURE_PRICE_KES = 200
@@ -238,6 +257,16 @@ def request_booking(listing_id: int, body: schemas.BookingCreate, current_user: 
         raise HTTPException(status_code=400, detail="End date must be after start date")
     if start_date < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Start date can't be in the past")
+
+    # Check for overlapping accepted/requested bookings on the same listing
+    overlap = db.query(models.Booking).filter(
+        models.Booking.listing_id == listing.id,
+        models.Booking.status.in_(["requested", "accepted"]),
+        models.Booking.start_date < end_date,
+        models.Booking.end_date > start_date,
+    ).first()
+    if overlap:
+        raise HTTPException(status_code=409, detail="These dates overlap with an existing booking request")
 
     days = max(1, (end_date - start_date).days)
     booking = models.Booking(

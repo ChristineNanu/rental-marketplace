@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { API_BASE_URL } from '../constants';
 import { apiFetch } from '../api';
 
 const LINKS = [
@@ -11,13 +10,21 @@ const LINKS = [
   { to: '/dashboard', label: 'Dashboard' },
 ];
 
+// Module-level cache — survives re-renders, resets on page reload (which also
+// clears tokens, so stale admin state is never an issue).
+let _meCache = null;
+
 export default function Nav({ onLogout }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(!!_meCache?.is_admin);
 
   useEffect(() => {
-    apiFetch(`${API_BASE_URL}/me`).then(r => r.ok ? r.json() : null).then(me => setIsAdmin(!!me?.is_admin));
+    if (_meCache) return;
+    apiFetch('/me').then(r => r.ok ? r.json() : null).then(me => {
+      _meCache = me;
+      setIsAdmin(!!me?.is_admin);
+    });
   }, []);
 
   const links = isAdmin ? [...LINKS, { to: '/admin/revenue', label: 'Revenue' }] : LINKS;

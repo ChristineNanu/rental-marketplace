@@ -27,11 +27,23 @@ export default function MyBookings({ onLogout }) {
   const [busyId, setBusyId] = useState(null);
   const [payingBooking, setPayingBooking] = useState(null);
   const [ratingBooking, setRatingBooking] = useState(null);
-  const [ratedIds, setRatedIds] = useState([]);
+  const [ratedIds, setRatedIds] = useState(new Set());
 
-  const load = () => apiFetch(`${API_BASE_URL}/my-bookings`)
-    .then(r => r.ok ? r.json() : [])
-    .then(setBookings);
+  const load = async () => {
+    const res = await apiFetch(`${API_BASE_URL}/my-bookings`);
+    const data = res.ok ? await res.json() : [];
+    setBookings(data);
+    // For each completed booking, check if the renter has already rated
+    const completed = data.filter(b => b.status === 'completed');
+    const checks = await Promise.all(
+      completed.map(b =>
+        apiFetch(`${API_BASE_URL}/bookings/${b.id}/ratings`)
+          .then(r => r.ok ? r.json() : [])
+          .then(ratings => ratings.some(r => r.rated_role === 'owner') ? b.id : null)
+      )
+    );
+    setRatedIds(new Set(checks.filter(Boolean)));
+  };
 
   useEffect(() => { load(); }, []);
 
@@ -89,7 +101,7 @@ export default function MyBookings({ onLogout }) {
                     Cancel
                   </button>
                 )}
-                {b.status === 'completed' && !ratedIds.includes(b.id) && (
+                {b.status === 'completed' && !ratedIds.has(b.id) && (
                   <button onClick={() => setRatingBooking(b)} className="text-xs font-bold text-amber-600 bg-white border border-amber-200 rounded-lg px-2 py-1 cursor-pointer">
                     Rate owner
                   </button>
@@ -113,7 +125,7 @@ export default function MyBookings({ onLogout }) {
           booking={ratingBooking}
           targetLabel="the owner"
           onCancel={() => setRatingBooking(null)}
-          onSuccess={() => { setRatedIds(ids => [...ids, ratingBooking.id]); setRatingBooking(null); }}
+          onSuccess={() => { setRatedIds(ids => new Set([...ids, ratingBooking.id])); setRatingBooking(null); }}
         />
       )}
     </div>

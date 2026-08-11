@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API_BASE_URL } from '../constants';
+import { apiFetch } from '../api';
 import Nav from './Nav';
 import ListingThumb from './ListingThumb';
 
@@ -15,8 +15,8 @@ export default function Browse({ onLogout }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/areas`).then(r => r.json()).then(setAreas);
-    fetch(`${API_BASE_URL}/categories`).then(r => r.json()).then(setCategories);
+    apiFetch('/areas').then(r => r.json()).then(setAreas);
+    apiFetch('/categories').then(r => r.json()).then(setCategories);
   }, []);
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export default function Browse({ onLogout }) {
     if (areaId) params.set('area_id', areaId);
     if (categoryId) params.set('category_id', categoryId);
     if (q) params.set('q', q);
-    fetch(`${API_BASE_URL}/listings?${params.toString()}`)
+    apiFetch(`/listings?${params.toString()}`)
       .then(r => r.json())
       .then(setListings)
       .finally(() => setLoading(false));
