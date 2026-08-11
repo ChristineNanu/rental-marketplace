@@ -6,6 +6,7 @@ import Nav from './Nav';
 import MpesaPaymentModal from './MpesaPaymentModal';
 import RatingModal from './RatingModal';
 import ListingThumb from './ListingThumb';
+import BookingChat from './BookingChat';
 
 const STATUS_STYLES = {
   requested: 'bg-amber-100 text-amber-700',
@@ -28,6 +29,7 @@ export default function MyBookings({ onLogout }) {
   const [payingBooking, setPayingBooking] = useState(null);
   const [ratingBooking, setRatingBooking] = useState(null);
   const [ratedIds, setRatedIds] = useState(new Set());
+  const [chatBooking, setChatBooking] = useState(null);
 
   const load = async () => {
     const res = await apiFetch(`${API_BASE_URL}/my-bookings`);
@@ -106,6 +108,11 @@ export default function MyBookings({ onLogout }) {
                     Rate owner
                   </button>
                 )}
+                {['requested','accepted','completed'].includes(b.status) && (
+                  <button onClick={() => setChatBooking(b)} className="text-xs font-bold text-white bg-slate-700 hover:bg-slate-800 rounded-lg px-2 py-1 cursor-pointer border-0 flex items-center gap-1">
+                    💬 Message
+                  </button>
+                )}
               </div>
             </div>
           ))
@@ -127,6 +134,9 @@ export default function MyBookings({ onLogout }) {
           onCancel={() => setRatingBooking(null)}
           onSuccess={() => { setRatedIds(ids => new Set([...ids, ratingBooking.id])); setRatingBooking(null); }}
         />
+      )}
+      {chatBooking && (
+        <BookingChat booking={chatBooking} onClose={() => setChatBooking(null)} />
       )}
     </div>
   );

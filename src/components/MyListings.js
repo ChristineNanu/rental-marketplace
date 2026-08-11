@@ -6,6 +6,7 @@ import Nav from './Nav';
 import RatingModal from './RatingModal';
 import SimplePaymentModal from './SimplePaymentModal';
 import ListingThumb from './ListingThumb';
+import BookingChat from './BookingChat';
 
 const STATUS_STYLES = {
   requested: 'bg-amber-100 text-amber-700',
@@ -224,6 +225,7 @@ function RequestsPanel({ listingId, onDepositResolved }) {
   const [claimingBooking, setClaimingBooking] = useState(null);
   const [ratingBooking, setRatingBooking] = useState(null);
   const [ratedIds, setRatedIds] = useState([]);
+  const [chatBooking, setChatBooking] = useState(null);
 
   const load = () => apiFetch(`${API_BASE_URL}/listings/${listingId}/bookings`)
     .then(r => r.ok ? r.json() : [])
@@ -296,6 +298,11 @@ function RequestsPanel({ listingId, onDepositResolved }) {
             {b.status === 'completed' && !ratedIds.includes(b.id) && (
               <button onClick={() => setRatingBooking(b)} className="text-xs font-bold text-amber-600 bg-white border border-amber-200 rounded-lg px-2 py-1 cursor-pointer">Rate renter</button>
             )}
+            {['requested','accepted','completed'].includes(b.status) && (
+              <button onClick={() => setChatBooking(b)} className="text-xs font-bold text-white bg-slate-700 hover:bg-slate-800 rounded-lg px-2 py-1 cursor-pointer border-0 flex items-center gap-1">
+                💬 Message
+              </button>
+            )}
           </div>
         </div>
       ))}
@@ -315,6 +322,9 @@ function RequestsPanel({ listingId, onDepositResolved }) {
           onCancel={() => setRatingBooking(null)}
           onSuccess={() => { setRatedIds(ids => [...ids, ratingBooking.id]); setRatingBooking(null); }}
         />
+      )}
+      {chatBooking && (
+        <BookingChat booking={chatBooking} onClose={() => setChatBooking(null)} />
       )}
     </div>
   );

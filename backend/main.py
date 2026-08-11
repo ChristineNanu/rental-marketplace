@@ -662,7 +662,50 @@ def get_booking_ratings(booking_id: int, current_user: models.User = Depends(aut
     return db.query(models.Rating).filter(models.Rating.booking_id == booking_id).all()
 
 
-# ─── FEATURED LISTINGS ────────────────────────────────────────────────────────
+# ─── BOOKING MESSAGES ─────────────────────────────────────────────────────────
+
+@app.get("/bookings/{booking_id}/messages")
+def get_booking_messages(booking_id: int, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    _get_booking_for_user(booking_id, current_user, db)
+    msgs = db.query(models.BookingMessage).filter(
+        models.BookingMessage.booking_id == booking_id
+    ).order_by(models.BookingMessage.created_at).all()
+    return [
+        {
+            "id": m.id,
+            "booking_id": m.booking_id,
+            "sender_id": m.sender_id,
+            "sender_name": m.sender.full_name or m.sender.username,
+            "body": m.body,
+            "created_at": m.created_at.isoformat(),
+            "is_mine": m.sender_id == current_user.id,
+        }
+        for m in msgs
+    ]
+
+
+@app.post("/bookings/{booking_id}/messages", status_code=201)
+def send_booking_message(booking_id: int, body: dict, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    _get_booking_for_user(booking_id, current_user, db)
+    text = (body.get("body") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    msg = models.BookingMessage(booking_id=booking_id, sender_id=current_user.id, body=text)
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return {
+        "id": msg.id,
+        "booking_id": msg.booking_id,
+        "sender_id": msg.sender_id,
+        "sender_name": msg.sender.full_name or msg.sender.username,
+        "body": msg.body,
+        "created_at": msg.created_at.isoformat(),
+        "is_mine": True,
+    }
+
+
+
 
 @app.post("/listings/{listing_id}/feature")
 def feature_listing(listing_id: int, body: schemas.PaymentRequest, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):

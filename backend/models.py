@@ -179,6 +179,18 @@ class BusinessSubscription(Base):
     user = relationship("User")
 
 
+class BookingMessage(Base):
+    __tablename__ = "booking_messages"
+    id = Column(Integer, primary_key=True, index=True)
+    booking_id = Column(Integer, ForeignKey("bookings.id"), index=True)
+    sender_id = Column(Integer, ForeignKey("users.id"))
+    body = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    booking = relationship("Booking")
+    sender = relationship("User", foreign_keys=[sender_id])
+
+
 class Rating(Base):
     __tablename__ = "ratings"
     __table_args__ = (
