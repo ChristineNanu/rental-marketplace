@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../constants';
 import { apiFetch } from '../api';
@@ -21,6 +21,69 @@ const DEPOSIT_LABELS = {
   claimed: 'Deposit claimed',
 };
 
+function PhotoUploader({ photoUrls, onChange }) {
+  const inputRef = useRef();
+  const [uploading, setUploading] = useState(false);
+
+  const handleFiles = async (files) => {
+    setUploading(true);
+    const uploaded = [];
+    for (const file of files) {
+      const form = new FormData();
+      form.append('file', file);
+      try {
+        const res = await apiFetch('/upload-image', { method: 'POST', body: form });
+        const data = await res.json();
+        if (res.ok) uploaded.push(`${API_BASE_URL}${data.url}`);
+      } catch { /* skip */ }
+    }
+    onChange([...photoUrls, ...uploaded]);
+    setUploading(false);
+  };
+
+  const remove = (i) => onChange(photoUrls.filter((_, idx) => idx !== i));
+
+  return (
+    <div>
+      <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Photos</label>
+      <div
+        className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center cursor-pointer hover:border-amber-400 transition-colors"
+        onClick={() => inputRef.current.click()}
+        onDragOver={e => e.preventDefault()}
+        onDrop={e => { e.preventDefault(); handleFiles([...e.dataTransfer.files]); }}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          multiple
+          className="hidden"
+          onChange={e => handleFiles([...e.target.files])}
+        />
+        {uploading
+          ? <p className="text-sm text-amber-600 font-bold">Uploading...</p>
+          : <p className="text-sm text-slate-400">Click or drag images here <span className="text-slate-300">(JPEG, PNG, WebP · max 5 MB)</span></p>
+        }
+        {photoUrls.length === 0 && <p className="text-xs text-red-400 mt-1">At least one photo is required</p>}
+      </div>
+      {photoUrls.length > 0 && (
+        <div className="flex gap-2 mt-3 flex-wrap">
+          {photoUrls.map((url, i) => (
+            <div key={i} className="relative w-16 h-16 rounded-xl overflow-hidden bg-slate-100">
+              <img src={url} alt="" className="w-full h-full object-cover" />
+              <button
+                type="button"
+                onClick={() => remove(i)}
+                className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white text-xs leading-none border-0 cursor-pointer flex items-center justify-center"
+              >×</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EditListingModal({ listing, onCancel, onSuccess }) {
   const [areas, setAreas] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -32,6 +95,9 @@ function EditListingModal({ listing, onCancel, onSuccess }) {
     price_per_day: listing.price_per_day,
     deposit_amount: listing.deposit_amount,
   });
+  const [photoUrls, setPhotoUrls] = useState(
+    listing.photos ? listing.photos.split(',').filter(Boolean) : []
+  );
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -44,6 +110,7 @@ function EditListingModal({ listing, onCancel, onSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (photoUrls.length === 0) { setError('Please upload at least one photo.'); return; }
     setError(''); setSubmitting(true);
     try {
       const res = await apiFetch(`${API_BASE_URL}/listings/${listing.id}`, {
@@ -55,6 +122,7 @@ function EditListingModal({ listing, onCancel, onSuccess }) {
           area_id: Number(form.area_id),
           price_per_day: Number(form.price_per_day),
           deposit_amount: Number(form.deposit_amount || 0),
+          photos: photoUrls.join(','),
         }),
       });
       const data = await res.json();
@@ -90,6 +158,7 @@ function EditListingModal({ listing, onCancel, onSuccess }) {
             <input className="input-field" type="number" min="0" step="1" placeholder="Price/day (KES)" value={form.price_per_day} onChange={update('price_per_day')} required />
             <input className="input-field" type="number" min="0" step="1" placeholder="Deposit (KES)" value={form.deposit_amount} onChange={update('deposit_amount')} />
           </div>
+          <PhotoUploader photoUrls={photoUrls} onChange={setPhotoUrls} />
           {error && <p className="text-sm text-red-600 font-semibold">{error}</p>}
           <button type="submit" disabled={submitting} className="btn-primary w-full py-3">
             {submitting ? 'Saving...' : 'Save changes'}
@@ -101,7 +170,7 @@ function EditListingModal({ listing, onCancel, onSuccess }) {
   );
 }
 
-{ booking, onCancel, onSuccess }) {
+function ClaimDepositModal({ booking, onCancel, onSuccess }) {
   const [phone, setPhone] = useState('');
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
@@ -262,7 +331,7 @@ export default function MyListings({ onLogout }) {
     .then(r => r.ok ? r.json() : [])
     .then(setListings);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const togglePause = async (listing) => {
     await apiFetch(`${API_BASE_URL}/listings/${listing.id}`, {
