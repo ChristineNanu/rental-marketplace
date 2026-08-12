@@ -13,6 +13,7 @@ export function clearAuth() {
   localStorage.removeItem('refresh_token');
   localStorage.removeItem('user_id');
   localStorage.removeItem('username');
+  localStorage.removeItem('is_admin');
   // Bust the Nav /me cache so the next login gets a fresh fetch
   if (typeof window !== 'undefined') window.__meCache = null;
 }

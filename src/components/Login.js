@@ -24,6 +24,7 @@ export default function Login({ onLogin }) {
         setTokens(data);
         localStorage.setItem('user_id', data.user_id);
         localStorage.setItem('username', data.username);
+        localStorage.setItem('is_admin', data.is_admin ? 'true' : '');
         onLogin();
         navigate('/dashboard');
       } else {

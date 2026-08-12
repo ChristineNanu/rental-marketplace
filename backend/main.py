@@ -699,9 +699,9 @@ def get_booking_messages(booking_id: int, current_user: models.User = Depends(au
 
 
 @app.post("/bookings/{booking_id}/messages", status_code=201)
-def send_booking_message(booking_id: int, body: dict, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+def send_booking_message(booking_id: int, body: schemas.BookingMessageCreate, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
     _get_booking_for_user(booking_id, current_user, db)
-    text = (body.get("body") or "").strip()
+    text = body.body.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
     msg = models.BookingMessage(booking_id=booking_id, sender_id=current_user.id, body=text,
@@ -723,31 +723,45 @@ def send_booking_message(booking_id: int, body: dict, current_user: models.User 
 @app.get("/messages/unread")
 def get_unread_messages(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
     from sqlalchemy import or_
-    booking_ids = db.query(models.Booking.id).join(models.Listing).filter(
+    # Single query: fetch all messages for the user's bookings that they haven't read
+    bookings = db.query(models.Booking).join(models.Listing).filter(
         or_(
             models.Booking.renter_id == current_user.id,
             models.Listing.owner_id == current_user.id,
         ),
         models.Booking.status.in_(["requested", "accepted", "completed"])
+    ).options(
+        joinedload(models.Booking.listing),
     ).all()
-    booking_ids = [b.id for b in booking_ids]
+
+    booking_map = {b.id: b for b in bookings}
+    if not booking_map:
+        return []
+
+    all_msgs = db.query(models.BookingMessage).options(
+        joinedload(models.BookingMessage.sender)
+    ).filter(
+        models.BookingMessage.booking_id.in_(list(booking_map.keys())),
+        models.BookingMessage.sender_id != current_user.id,
+    ).all()
+
+    unread_by_booking: dict = {}
+    for m in all_msgs:
+        if not _msg_is_read_by(m, current_user.id):
+            unread_by_booking.setdefault(m.booking_id, []).append(m)
+
     results = []
-    for bid in booking_ids:
-        unread = [m for m in db.query(models.BookingMessage).filter(
-            models.BookingMessage.booking_id == bid,
-            models.BookingMessage.sender_id != current_user.id,
-        ).all() if not _msg_is_read_by(m, current_user.id)]
-        if unread:
-            latest = max(unread, key=lambda m: m.created_at)
-            booking = db.query(models.Booking).filter(models.Booking.id == bid).first()
-            results.append({
-                "booking_id": bid,
-                "listing_title": booking.listing.title,
-                "unread_count": len(unread),
-                "latest_body": latest.body[:80],
-                "latest_sender": latest.sender.full_name or latest.sender.username,
-                "latest_at": latest.created_at.isoformat(),
-            })
+    for bid, msgs in unread_by_booking.items():
+        latest = max(msgs, key=lambda m: m.created_at)
+        booking = booking_map[bid]
+        results.append({
+            "booking_id": bid,
+            "listing_title": booking.listing.title,
+            "unread_count": len(msgs),
+            "latest_body": latest.body[:80],
+            "latest_sender": latest.sender.full_name or latest.sender.username,
+            "latest_at": latest.created_at.isoformat(),
+        })
     results.sort(key=lambda x: x["latest_at"], reverse=True)
     return results
 
@@ -803,6 +817,8 @@ def get_subscription(current_user: models.User = Depends(auth.get_current_user),
 
 @app.post("/business/subscribe")
 def subscribe(body: schemas.SubscribeRequest, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    if body.plan not in PLAN_PRICES:
+        raise HTTPException(status_code=400, detail="Plan must be 'pro' or 'premium'")
     price = PLAN_PRICES[body.plan]
 
     try:

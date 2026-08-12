@@ -34,7 +34,7 @@ export default function App() {
         <Route path="/my-listings" element={isLoggedIn ? <MyListings onLogout={handleLogout} /> : <Navigate to="/login" replace />} />
         <Route path="/my-bookings" element={isLoggedIn ? <MyBookings onLogout={handleLogout} /> : <Navigate to="/login" replace />} />
         <Route path="/business" element={isLoggedIn ? <Business onLogout={handleLogout} /> : <Navigate to="/login" replace />} />
-        <Route path="/admin/revenue" element={isLoggedIn ? <AdminRevenue onLogout={handleLogout} /> : <Navigate to="/login" replace />} />
+        <Route path="/admin/revenue" element={isLoggedIn && !!localStorage.getItem('is_admin') ? <AdminRevenue onLogout={handleLogout} /> : <Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>
   );

@@ -239,6 +239,10 @@ class RatingCreate(BaseModel):
         return v
 
 
+class BookingMessageCreate(BaseModel):
+    body: str
+
+
 class RatingOut(BaseModel):
     id: int
     booking_id: int
