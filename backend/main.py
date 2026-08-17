@@ -297,7 +297,12 @@ def _booking_query(db: Session):
 
 @app.post("/listings/{listing_id}/bookings", response_model=schemas.BookingOut)
 def request_booking(listing_id: int, body: schemas.BookingCreate, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
-    listing = db.query(models.Listing).filter(models.Listing.id == listing_id).first()
+    # ATOMIC: Lock the listing row to prevent concurrent bookings of overlapping dates.
+    # SQLAlchemy's with_for_update() acquires a database-level lock, serializing
+    # access to this listing until the transaction commits. This closes the TOCTOU gap.
+    listing = db.query(models.Listing).with_for_update().filter(
+        models.Listing.id == listing_id
+    ).first()
     if not listing or listing.status != "active":
         raise HTTPException(status_code=404, detail="Listing not found")
     if listing.owner_id == current_user.id:
@@ -313,7 +318,8 @@ def request_booking(listing_id: int, body: schemas.BookingCreate, current_user: 
     if start_date < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Start date can't be in the past")
 
-    # Check for overlapping accepted/requested bookings on the same listing
+    # Check for overlapping accepted/requested bookings on the same listing.
+    # We are now holding the lock on this listing, so this check + insert is atomic.
     overlap = db.query(models.Booking).filter(
         models.Booking.listing_id == listing.id,
         models.Booking.status.in_(["requested", "accepted"]),
