@@ -5,11 +5,24 @@ import { apiFetch } from '../api';
 import Nav from './Nav';
 import PhotoGallery from './PhotoGallery';
 
+// Check if a single date falls within any booked range
 function isDateInBookedRange(dateStr, bookedRanges) {
   const d = new Date(dateStr);
   return bookedRanges.some(({ start, end }) => {
     const s = new Date(start), e = new Date(end);
     return d >= s && d < e;
+  });
+}
+
+// Check if a date range overlaps with ANY booked range
+function doesRangeOverlapBookedDates(startStr, endStr, bookedRanges) {
+  if (!startStr || !endStr) return false;
+  const start = new Date(startStr);
+  const end = new Date(endStr);
+  return bookedRanges.some(({ start: bookedStart, end: bookedEnd }) => {
+    const s = new Date(bookedStart), e = new Date(bookedEnd);
+    // Ranges overlap if: start < bookedEnd AND end > bookedStart
+    return start < e && end > s;
   });
 }
 
@@ -38,17 +51,26 @@ export default function ListingDetail({ onLogout, isLoggedIn }) {
   const handleStartDate = (val) => {
     setError('');
     if (isDateInBookedRange(val, bookedRanges)) {
-      setError('That start date falls within an existing booking.');
+      setError('❌ That start date is already booked. Choose another date.');
+      return;
+    }
+    // If end date is already set, check if the range overlaps
+    if (endDate && doesRangeOverlapBookedDates(val, endDate, bookedRanges)) {
+      setError('❌ Selected dates overlap with existing bookings. Choose different dates.');
       return;
     }
     setStartDate(val);
-    setEndDate('');
   };
 
   const handleEndDate = (val) => {
     setError('');
     if (isDateInBookedRange(val, bookedRanges)) {
-      setError('That end date falls within an existing booking.');
+      setError('❌ That end date is already booked. Choose another date.');
+      return;
+    }
+    // Check if the full range overlaps with any booked dates
+    if (startDate && doesRangeOverlapBookedDates(startDate, val, bookedRanges)) {
+      setError('❌ Selected dates overlap with existing bookings. Choose different dates.');
       return;
     }
     setEndDate(val);
@@ -57,6 +79,14 @@ export default function ListingDetail({ onLogout, isLoggedIn }) {
   const handleRequest = async (e) => {
     e.preventDefault();
     setError(''); setSuccess(''); setSubmitting(true);
+    
+    // Final validation: ensure selected dates don't overlap with booked dates
+    if (doesRangeOverlapBookedDates(startDate, endDate, bookedRanges)) {
+      setError('❌ Your selected dates overlap with existing bookings. Please choose different dates.');
+      setSubmitting(false);
+      return;
+    }
+    
     try {
       const res = await apiFetch(`${API_BASE_URL}/listings/${id}/bookings`, {
         method: 'POST',
@@ -68,7 +98,7 @@ export default function ListingDetail({ onLogout, isLoggedIn }) {
       });
       const data = await res.json();
       if (res.ok) {
-        setSuccess('Request sent! Track it under My Bookings.');
+        setSuccess('✅ Request sent! Track it under My Bookings.');
         setStartDate(''); setEndDate('');
       } else {
         setError(data.detail || 'Could not send request.');
@@ -164,15 +194,22 @@ export default function ListingDetail({ onLogout, isLoggedIn }) {
               )}
 
               {bookedRanges.length > 0 && (
-                <div className="mb-5 p-3.5 bg-amber-50 border border-amber-200 rounded-2xl">
-                  <p className="text-xs font-black text-amber-700 mb-2 flex items-center gap-1">
-                    <span>📅</span> Already booked:
+                <div className="mb-5 p-4 bg-amber-50 border-2 border-amber-400 rounded-2xl">
+                  <p className="text-xs font-black text-amber-800 mb-3 flex items-center gap-2">
+                    <span>🚫</span> THESE DATES ARE BOOKED
                   </p>
-                  {bookedRanges.map((r, i) => (
-                    <p key={i} className="text-xs text-amber-600 font-medium">
-                      {new Date(r.start).toLocaleDateString()} – {new Date(r.end).toLocaleDateString()}
-                    </p>
-                  ))}
+                  <div className="space-y-2">
+                    {bookedRanges.map((r, i) => (
+                      <div key={i} className="bg-white/60 border border-amber-200 rounded-lg px-3 py-2">
+                        <p className="text-xs text-amber-900 font-bold">
+                          {new Date(r.start).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} – {new Date(r.end).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-amber-700 mt-3 font-medium">
+                    ⚠️ Avoid these dates when booking below
+                  </p>
                 </div>
               )}
 
@@ -180,14 +217,18 @@ export default function ListingDetail({ onLogout, isLoggedIn }) {
                 <form onSubmit={handleRequest} className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Start</label>
-                      <input type="date" className="input-field" value={startDate} min={today}
-                        onChange={e => handleStartDate(e.target.value)} required />
+                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Start Date</label>
+                      <input type="date" className={`input-field ${bookedRanges.length > 0 ? 'border-amber-300 bg-amber-50/30' : ''}`} 
+                        value={startDate} min={today}
+                        onChange={e => handleStartDate(e.target.value)} required 
+                        title={bookedRanges.length > 0 ? '⚠️ Some dates are already booked (see yellow box above)' : ''} />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5">End</label>
-                      <input type="date" className="input-field" value={endDate} min={startDate || today}
-                        onChange={e => handleEndDate(e.target.value)} required />
+                      <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1.5">End Date</label>
+                      <input type="date" className={`input-field ${bookedRanges.length > 0 ? 'border-amber-300 bg-amber-50/30' : ''}`} 
+                        value={endDate} min={startDate || today}
+                        onChange={e => handleEndDate(e.target.value)} required 
+                        title={bookedRanges.length > 0 ? '⚠️ Some dates are already booked (see yellow box above)' : ''} />
                     </div>
                   </div>
 
@@ -211,17 +252,23 @@ export default function ListingDetail({ onLogout, isLoggedIn }) {
                   )}
 
                   {error && (
-                    <p className="text-sm text-red-600 font-semibold flex items-center gap-1.5 animate-slide-down">
-                      <span>⚠️</span> {error}
+                    <p className="text-sm text-red-600 font-semibold flex items-center gap-1.5 animate-slide-down bg-red-50 border border-red-200 rounded-xl p-3">
+                      {error}
                     </p>
                   )}
                   {success && (
-                    <p className="text-sm text-emerald-600 font-semibold flex items-center gap-1.5 animate-slide-down">
-                      <span>✅</span> {success}
+                    <p className="text-sm text-emerald-600 font-semibold flex items-center gap-1.5 animate-slide-down bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+                      {success}
                     </p>
                   )}
 
-                  <button type="submit" disabled={submitting} className="btn-primary w-full py-3.5 text-base">
+                  <button type="submit" 
+                    disabled={submitting || !!error || doesRangeOverlapBookedDates(startDate, endDate, bookedRanges)} 
+                    className={`btn-primary w-full py-3.5 text-base transition-all ${
+                      submitting || !!error || doesRangeOverlapBookedDates(startDate, endDate, bookedRanges) 
+                        ? 'opacity-50 cursor-not-allowed' 
+                        : ''
+                    }`}>
                     {submitting ? (
                       <span className="flex items-center justify-center gap-2">
                         <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
