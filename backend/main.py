@@ -64,6 +64,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ─── GLOBAL ERROR HANDLING ───────────────────────────────────────────────────
+# Prevents sensitive data (phone, amounts, details) from leaking in error responses
+import logging
+logger = logging.getLogger(__name__)
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    # Log the full error internally (safe)
+    logger.warning(f"HTTP {exc.status_code}: {exc.detail}")
+    # Return safe public message
+    if exc.status_code == 500:
+        return {"detail": "Internal server error. Please try again later."}
+    return {"detail": exc.detail}
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    # Log full error with traceback (internal only)
+    logger.error(f"Unhandled exception: {type(exc).__name__}: {str(exc)}", exc_info=True)
+    # Return generic message (no sensitive data)
+    return {"detail": "Internal server error. Please try again later."}
+
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
@@ -669,6 +690,28 @@ def get_booking_ratings(booking_id: int, current_user: models.User = Depends(aut
     return db.query(models.Rating).filter(models.Rating.booking_id == booking_id).all()
 
 
+@app.get("/users/{user_id}/ratings")
+def get_user_ratings(user_id: int, db: Session = Depends(get_db)):
+    """Get aggregated ratings for a user, separated by role (owner vs renter)"""
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {
+        "user_id": user.id,
+        "username": user.username,
+        "full_name": user.full_name,
+        "as_owner": {
+            "avg_rating": round(user.rating_as_owner_avg, 1) if user.rating_as_owner_avg else 0,
+            "count": user.rating_as_owner_count,
+        },
+        "as_renter": {
+            "avg_rating": round(user.rating_as_renter_avg, 1) if user.rating_as_renter_avg else 0,
+            "count": user.rating_as_renter_count,
+        },
+    }
+
+
 # ─── BOOKING MESSAGES ─────────────────────────────────────────────────────────────────────────────────
 
 def _msg_is_read_by(msg, user_id: int) -> bool:
@@ -903,3 +946,144 @@ def admin_deposit_claims(current_user: models.User = Depends(auth.require_admin)
         }
         for b in bookings
     ]
+
+
+@app.get("/admin/bookings")
+def admin_bookings(
+    status: Optional[str] = None,
+    current_user: models.User = Depends(auth.require_admin),
+    db: Session = Depends(get_db)
+):
+    """Get all bookings with optional status filter"""
+    query = db.query(models.Booking).options(
+        joinedload(models.Booking.listing).joinedload(models.Listing.owner),
+        joinedload(models.Booking.renter),
+    ).order_by(models.Booking.created_at.desc())
+    
+    if status:
+        query = query.filter(models.Booking.status == status)
+    
+    bookings = query.all()
+    return [
+        {
+            "id": b.id,
+            "listing_id": b.listing_id,
+            "listing_title": b.listing.title if b.listing else None,
+            "owner": b.listing.owner.username if b.listing and b.listing.owner else None,
+            "renter": b.renter.username if b.renter else None,
+            "start_date": b.start_date.isoformat() if b.start_date else None,
+            "end_date": b.end_date.isoformat() if b.end_date else None,
+            "total_price": b.total_price,
+            "deposit_amount": b.deposit_amount,
+            "status": b.status,
+            "payment_status": b.payment_status,
+            "deposit_status": b.deposit_status,
+            "created_at": b.created_at.isoformat() if b.created_at else None,
+        }
+        for b in bookings
+    ]
+
+
+@app.get("/admin/users")
+def admin_users(current_user: models.User = Depends(auth.require_admin), db: Session = Depends(get_db)):
+    """Get all users with their ratings"""
+    users = db.query(models.User).filter(models.User.deleted_at.is_(None)).all()
+    return [
+        {
+            "id": u.id,
+            "username": u.username,
+            "email": u.email,
+            "full_name": u.full_name,
+            "is_business": u.is_business,
+            "phone_verified": u.phone_verified,
+            "rating_as_owner": {
+                "avg": round(u.rating_as_owner_avg, 1),
+                "count": u.rating_as_owner_count,
+            },
+            "rating_as_renter": {
+                "avg": round(u.rating_as_renter_avg, 1),
+                "count": u.rating_as_renter_count,
+            },
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        }
+        for u in users
+    ]
+
+
+@app.get("/admin/listings")
+def admin_listings(current_user: models.User = Depends(auth.require_admin), db: Session = Depends(get_db)):
+    """Get all listings with booking counts"""
+    listings = db.query(models.Listing).options(
+        joinedload(models.Listing.owner),
+        joinedload(models.Listing.category),
+        joinedload(models.Listing.area),
+    ).filter(models.Listing.deleted_at.is_(None)).all()
+    
+    return [
+        {
+            "id": l.id,
+            "title": l.title,
+            "owner": l.owner.username if l.owner else None,
+            "category": l.category.name if l.category else None,
+            "area": l.area.name if l.area else None,
+            "price_per_day": l.price_per_day,
+            "deposit_amount": l.deposit_amount,
+            "status": l.status,
+            "is_featured": l.is_featured,
+            "total_bookings": db.query(models.Booking).filter(
+                models.Booking.listing_id == l.id,
+                models.Booking.status == "completed"
+            ).count(),
+            "created_at": l.created_at.isoformat() if l.created_at else None,
+        }
+        for l in listings
+    ]
+
+
+@app.get("/admin/dashboard-summary")
+def admin_dashboard_summary(current_user: models.User = Depends(auth.require_admin), db: Session = Depends(get_db)):
+    """Quick stats for admin dashboard"""
+    completed_bookings = db.query(models.Booking).filter(models.Booking.status == "completed").count()
+    pending_bookings = db.query(models.Booking).filter(models.Booking.status == "requested").count()
+    active_listings = db.query(models.Listing).filter(models.Listing.status == "active", models.Listing.deleted_at.is_(None)).count()
+    total_users = db.query(models.User).filter(models.User.deleted_at.is_(None)).count()
+    business_users = db.query(models.User).filter(models.User.is_business == True, models.User.deleted_at.is_(None)).count()  # noqa: E712
+    
+    # Top rated owners
+    top_owners = db.query(models.User).filter(
+        models.User.rating_as_owner_count > 0,
+        models.User.deleted_at.is_(None)
+    ).order_by(models.User.rating_as_owner_avg.desc()).limit(5).all()
+    
+    # Payments summary
+    completed_payments = db.query(models.Payment).filter(models.Payment.status == "completed").all()
+    total_commission = sum(p.platform_commission for p in completed_payments if p.purpose == "booking")
+    
+    return {
+        "bookings": {
+            "completed": completed_bookings,
+            "pending": pending_bookings,
+            "total": completed_bookings + pending_bookings,
+        },
+        "listings": {
+            "active": active_listings,
+            "featured": db.query(models.Listing).filter(models.Listing.featured_until > datetime.now(timezone.utc)).count(),
+        },
+        "users": {
+            "total": total_users,
+            "business": business_users,
+            "verified": db.query(models.User).filter(models.User.phone_verified == True, models.User.deleted_at.is_(None)).count(),  # noqa: E712
+        },
+        "revenue": {
+            "total_commission_kes": int(total_commission),
+            "total_gmv_kes": int(sum(p.rental_amount for p in completed_payments if p.purpose == "booking")),
+        },
+        "top_owners": [
+            {
+                "username": u.username,
+                "rating": round(u.rating_as_owner_avg, 1),
+                "bookings": u.rating_as_owner_count,
+            }
+            for u in top_owners
+        ]
+    }

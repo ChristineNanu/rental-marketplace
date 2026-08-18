@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../constants';
 import { apiFetch } from '../api';
+import { getErrorMessage } from '../utils/validation';
 import Nav from './Nav';
 import PhotoGallery from './PhotoGallery';
 
@@ -98,13 +99,23 @@ export default function ListingDetail({ onLogout, isLoggedIn }) {
       });
       const data = await res.json();
       if (res.ok) {
-        setSuccess('✅ Request sent! Track it under My Bookings.');
+        setSuccess('✅ Booking request sent! The owner will review it soon. Track it in My Bookings.');
         setStartDate(''); setEndDate('');
       } else {
-        setError(data.detail || 'Could not send request.');
+        // Use friendly error messages
+        const detail = data.detail || '';
+        if (detail.includes('overlap')) {
+          setError('📅 These dates were just booked by someone else. Try different dates.');
+        } else if (detail.includes('past')) {
+          setError('⏰ Start date must be in the future.');
+        } else if (detail.includes('own')) {
+          setError('🚫 You can\'t book your own listing.');
+        } else {
+          setError(getErrorMessage(detail));
+        }
       }
-    } catch {
-      setError('Connection error. Is the backend running?');
+    } catch (e) {
+      setError('📡 Connection error. Please check your internet and try again.');
     } finally {
       setSubmitting(false);
     }
