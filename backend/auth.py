@@ -110,7 +110,10 @@ def verify_refresh_token(raw_token: str, db: Session) -> models.User:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     if not record or record.revoked_at is not None or expires_at < now:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
-    user = db.query(models.User).filter(models.User.id == record.user_id).first()
+    user = db.query(models.User).filter(
+        models.User.id == record.user_id,
+        models.User.deleted_at.is_(None),
+    ).first()
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
     record.revoked_at = now

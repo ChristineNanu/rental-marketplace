@@ -571,11 +571,15 @@ async def mpesa_callback(request: Request, db: Session = Depends(get_db)):
         if not payment:
             return {"ResultCode": 0, "ResultDesc": "Accepted"}
 
-        if result_code == 0:
+        # Callback payloads are unauthenticated; confirm the transaction with
+        # Safaricom before changing local payment state.
+        provider_result = query_stk_status(checkout_request_id)
+        provider_code = str(provider_result.get("ResultCode", ""))
+        if provider_code == "0" and result_code == 0:
             metadata = stk_callback.get("CallbackMetadata", {}).get("Item", [])
             receipt = next((i["Value"] for i in metadata if i["Name"] == "MpesaReceiptNumber"), None)
             _mark_payment_completed(payment, db, receipt)
-        else:
+        elif provider_code and provider_code != "0" and result_code != 0:
             payment.status = "failed"
             db.commit()
     except Exception as e:
@@ -640,10 +644,18 @@ def claim_deposit(booking_id: int, body: schemas.DepositClaimRequest, current_us
     booking = _get_completed_booking_with_held_deposit(booking_id, current_user, db)
     if not body.reason.strip():
         raise HTTPException(status_code=400, detail="A reason is required to claim a deposit")
+    if not current_user.phone:
+        raise HTTPException(status_code=400, detail="Add a registered phone number before claiming a deposit")
+    try:
+        owner_phone = schemas._normalize_kenyan_phone(current_user.phone)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Your registered phone number is invalid")
+    if body.phone != owner_phone:
+        raise HTTPException(status_code=400, detail="The payout phone must match your registered phone number")
 
     try:
         b2c_payout(
-            phone=body.phone,
+            phone=owner_phone,
             amount=int(round(booking.deposit_amount)),
             occasion=f"Deposit claim booking {booking.id}",
             remarks=body.reason[:100],
