@@ -429,7 +429,7 @@ def update_booking_status(booking_id: int, body: schemas.BookingStatusUpdate, cu
 # ─── PAYMENTS (M-PESA) ────────────────────────────────────────────────────────
 
 def require_dev_env():
-    if os.getenv("ENV", "development") == "production":
+    if os.getenv("ENV", "").lower() not in ("development", "dev", "local"):
         raise HTTPException(status_code=403, detail="This endpoint is disabled in production")
 
 

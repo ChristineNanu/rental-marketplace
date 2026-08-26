@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import datetime
 
@@ -15,16 +15,16 @@ def _normalize_kenyan_phone(v: str) -> str:
 
 
 class UserCreate(BaseModel):
-    username: str
+    username: str = Field(min_length=3, max_length=64)
     email: str
-    password: str
-    full_name: Optional[str] = ""
+    password: str = Field(min_length=12, max_length=128)
+    full_name: Optional[str] = Field(default="", max_length=120)
     phone: Optional[str] = None
 
 
 class UserLogin(BaseModel):
-    username: str
-    password: str
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=128)
 
 
 class TokenPair(BaseModel):
@@ -62,22 +62,22 @@ class CategoryOut(BaseModel):
 # ─── LISTINGS ────────────────────────────────────────────────────────────────
 
 class ListingCreate(BaseModel):
-    title: str
-    description: Optional[str] = ""
+    title: str = Field(min_length=1, max_length=160)
+    description: Optional[str] = Field(default="", max_length=10000)
     category_id: int
     area_id: int
-    price_per_day: float
-    deposit_amount: Optional[float] = 0.0
+    price_per_day: float = Field(gt=0, le=1_000_000)
+    deposit_amount: Optional[float] = Field(default=0.0, ge=0, le=1_000_000)
     photos: Optional[str] = ""  # comma-separated URLs
 
 
 class ListingUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
+    title: Optional[str] = Field(default=None, min_length=1, max_length=160)
+    description: Optional[str] = Field(default=None, max_length=10000)
     category_id: Optional[int] = None
     area_id: Optional[int] = None
-    price_per_day: Optional[float] = None
-    deposit_amount: Optional[float] = None
+    price_per_day: Optional[float] = Field(default=None, gt=0, le=1_000_000)
+    deposit_amount: Optional[float] = Field(default=None, ge=0, le=1_000_000)
     photos: Optional[str] = None
     status: Optional[str] = None  # active | paused
 
