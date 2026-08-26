@@ -46,7 +46,7 @@ A dedicated marketing page (`/`) for logged-out visitors — dark slate hero wit
 ### 🔐 Authentication
 JWT auth with short-lived access tokens (30 min) + rotating, revocable refresh tokens (30 days, hashed at rest). Rate-limited login (30 attempts / 15 min) and register (10 / 10 min) via an in-memory sliding-window limiter. The login counter resets on a successful login so switching accounts never triggers a false lockout. No role enum — the same account is routinely both an owner and a renter; `is_admin` is the one genuinely exclusive permission.
 
-Admin account is seeded automatically on first startup: **username:** `admin` **password:** `admin1234`.
+An admin account is created on first startup only when `ADMIN_PASSWORD` is explicitly provisioned. Optional `ADMIN_USERNAME` and `ADMIN_EMAIL` environment variables customize its identity; there is no default administrator password.
 
 ### 🔍 Browse & Listings
 Public — no login required. Filter by area and category, or search by title and description. Featured listings sort first with a ★ badge. Paginated (12 per page). Each listing card shows a business badge if the owner has a business subscription. Availability calendar on the detail page shows already-booked date ranges so renters can pick valid dates before submitting.

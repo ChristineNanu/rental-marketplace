@@ -17,20 +17,22 @@ from database import get_db, engine
 
 models.Base.metadata.create_all(bind=engine)
 
-# ─── STARTUP: seed admin account if none exists ───────────────────────────────
+# ─── STARTUP: optional admin bootstrap ───────────────────────────────────────
 def _seed_admin():
+    admin_password = os.getenv("ADMIN_PASSWORD")
+    if not admin_password:
+        return
     db = next(get_db())
     try:
         if not db.query(models.User).filter(models.User.is_admin == True).first():  # noqa: E712
             db.add(models.User(
-                username="admin",
-                email="admin@rentitnairobi.local",
-                password=auth.get_password_hash("admin1234"),
+                username=os.getenv("ADMIN_USERNAME", "admin"),
+                email=os.getenv("ADMIN_EMAIL", "admin@rentitnairobi.local"),
+                password=auth.get_password_hash(admin_password),
                 full_name="Admin",
                 is_admin=True,
             ))
             db.commit()
-            print("Admin account seeded: username=admin password=admin1234")
     finally:
         db.close()
 
@@ -90,6 +92,15 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
 
 
+def _is_supported_image(data: bytes) -> bool:
+    return (
+        data.startswith(b"\xff\xd8\xff")
+        or data.startswith(b"\x89PNG\r\n\x1a\n")
+        or data.startswith((b"GIF87a", b"GIF89a"))
+        or len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+    )
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -105,16 +116,17 @@ async def upload_image(
     data = await file.read()
     if len(data) > MAX_IMAGE_SIZE:
         raise HTTPException(status_code=400, detail="Image must be under 5 MB")
+    if not _is_supported_image(data):
+        raise HTTPException(status_code=400, detail="Uploaded file is not a valid supported image")
     try:
         result = cloudinary.uploader.upload(
             data,
             folder="rentit",
             resource_type="image",
-            format=file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "jpg",
         )
         return {"url": result["secure_url"]}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=502, detail="Image upload service unavailable")
 
 
 # ─── AUTH ────────────────────────────────────────────────────────────────────
@@ -452,8 +464,8 @@ def pay_for_booking(booking_id: int, body: schemas.PaymentRequest, current_user:
             account_ref=f"BOOKING-{booking.id}",
             description=f"Rental booking #{booking.id}",
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"M-PESA error: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=502, detail="Payment provider unavailable")
 
     if result.get("ResponseCode") != "0":
         raise HTTPException(status_code=400, detail=result.get("errorMessage", "STK Push failed"))
@@ -615,8 +627,8 @@ def release_deposit(booking_id: int, current_user: models.User = Depends(auth.ge
             occasion=f"Deposit release booking {booking.id}",
             remarks="Deposit returned — item returned in good condition",
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"M-PESA error: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=502, detail="Payment provider unavailable")
 
     booking.deposit_status = "released"
     db.commit()
@@ -636,8 +648,8 @@ def claim_deposit(booking_id: int, body: schemas.DepositClaimRequest, current_us
             occasion=f"Deposit claim booking {booking.id}",
             remarks=body.reason[:100],
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"M-PESA error: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=502, detail="Payment provider unavailable")
 
     booking.deposit_status = "claimed"
     booking.deposit_claim_reason = body.reason
@@ -827,8 +839,8 @@ def feature_listing(listing_id: int, body: schemas.PaymentRequest, current_user:
             account_ref=f"FEATURE-{listing.id}",
             description=f"Feature listing #{listing.id} for {FEATURE_DAYS} days",
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"M-PESA error: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=502, detail="Payout provider unavailable")
 
     if result.get("ResponseCode") != "0":
         raise HTTPException(status_code=400, detail=result.get("errorMessage", "STK Push failed"))
@@ -877,8 +889,8 @@ def subscribe(body: schemas.SubscribeRequest, current_user: models.User = Depend
             account_ref=f"SUBSCRIBE-{current_user.id}",
             description=f"{body.plan.title()} plan — monthly subscription",
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"M-PESA error: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=502, detail="Payout provider unavailable")
 
     if result.get("ResponseCode") != "0":
         raise HTTPException(status_code=400, detail=result.get("errorMessage", "STK Push failed"))

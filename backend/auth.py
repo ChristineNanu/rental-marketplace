@@ -141,7 +141,10 @@ def decode_access_token(token: str) -> dict:
 
 def _user_from_raw_token(token: str, db: Session) -> models.User:
     payload = decode_access_token(token)
-    user = db.query(models.User).filter(models.User.id == int(payload["sub"])).first()
+    user = db.query(models.User).filter(
+        models.User.id == int(payload["sub"]),
+        models.User.deleted_at.is_(None),
+    ).first()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     return user
