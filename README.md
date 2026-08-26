@@ -48,6 +48,8 @@ JWT auth with short-lived access tokens (30 min) + rotating, revocable refresh t
 
 An admin account is created on first startup only when `ADMIN_PASSWORD` is explicitly provisioned. Optional `ADMIN_USERNAME` and `ADMIN_EMAIL` environment variables customize its identity; there is no default administrator password.
 
+Copy `backend/.env.example` to `backend/.env` for local setup. Rotate any credentials that were previously stored in a local `.env` before using them in production.
+
 ### 🔍 Browse & Listings
 Public — no login required. Filter by area and category, or search by title and description. Featured listings sort first with a ★ badge. Paginated (12 per page). Each listing card shows a business badge if the owner has a business subscription. Availability calendar on the detail page shows already-booked date ranges so renters can pick valid dates before submitting.
 
