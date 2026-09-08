@@ -4,7 +4,7 @@ A peer-to-peer rental marketplace for Nairobi — "Airbnb for stuff." List tools
 
 ---
 ![Home Page](./public/Screenshots/Home page.png)
-![Home Page](./public/Screenshots/home-page.png)
+![home Page](./public/Screenshots/home-page.png)
 ![My Listings](./public/Screenshots/my-listings.png)
 ![Business Plans](./public/Screenshots/business-plans.png)
 
