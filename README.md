@@ -3,6 +3,10 @@
 A peer-to-peer rental marketplace for Nairobi — "Airbnb for stuff." List tools, camping gear, event equipment, spare rooms, and parking spots for short-term rent instead of buying what you'll use once. Built with React and FastAPI, with M-Pesa deposit escrow, a two-way rating system, in-app messaging, real-time message notifications, Cloudinary image storage, and platform monetization (commission, featured listings, business subscriptions) layered on top.
 
 ---
+![Landing Page](./public/Screenshots/landing-page.png)
+![Home Page](./public/Screenshots/home-page.png)
+![My Listings](./public/Screenshots/my-listings.png)
+![Business Plans](./public/Screenshots/business-plans.png)
 
 ## What It Does
 
