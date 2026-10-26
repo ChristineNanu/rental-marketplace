@@ -6,6 +6,7 @@ from typing import Optional
 
 from fastapi import FastAPI, Depends, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import case, or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -76,16 +77,22 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     # Log the full error internally (safe)
     logger.warning(f"HTTP {exc.status_code}: {exc.detail}")
     # Return safe public message
-    if exc.status_code == 500:
-        return {"detail": "Internal server error. Please try again later."}
-    return {"detail": exc.detail}
+    detail = "Internal server error. Please try again later." if exc.status_code == 500 else exc.detail
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": detail},
+        headers=exc.headers,
+    )
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     # Log full error with traceback (internal only)
     logger.error(f"Unhandled exception: {type(exc).__name__}: {str(exc)}", exc_info=True)
     # Return generic message (no sensitive data)
-    return {"detail": "Internal server error. Please try again later."}
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error. Please try again later."},
+    )
 
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
