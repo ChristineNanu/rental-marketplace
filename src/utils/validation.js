@@ -44,8 +44,33 @@ export const validateDateRange = (startDate, endDate) => {
  */
 export const getErrorMessage = (error) => {
   if (!error) return 'Something went wrong. Please try again.';
-  
-  const message = error.toString().toLowerCase();
+
+  // FastAPI/Pydantic validation failures use an array of objects rather than
+  // a string. Turn those into readable text before they reach React.
+  if (Array.isArray(error)) {
+    const messages = error
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (!item || typeof item !== 'object') return '';
+
+        const field = Array.isArray(item.loc)
+          ? item.loc.filter((part) => part !== 'body').join('.')
+          : '';
+        const detail = typeof item.msg === 'string' ? item.msg : '';
+        return [field, detail].filter(Boolean).join(': ');
+      })
+      .filter(Boolean);
+
+    return messages.length ? messages.join('. ') : 'Please check the submitted information.';
+  }
+
+  if (typeof error === 'object') {
+    if (error.detail) return getErrorMessage(error.detail);
+    if (typeof error.msg === 'string') return error.msg;
+    return 'Something went wrong. Please try again.';
+  }
+
+  const message = String(error).toLowerCase();
   
   // Map specific errors to friendly messages
   if (message.includes('overlap')) {

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../constants';
 import { apiFetch } from '../api';
+import { getErrorMessage } from '../utils/validation';
 import Nav from './Nav';
 import ListingThumb from './ListingThumb';
 
@@ -111,7 +112,7 @@ export default function CreateListing({ onLogout }) {
       if (res.ok) {
         navigate(`/listings/${data.id}`);
       } else {
-        setError(data.detail || 'Could not create listing.');
+        setError(getErrorMessage(data.detail || 'Could not create listing.'));
       }
     } catch {
       setError('Connection error. Is the backend running?');

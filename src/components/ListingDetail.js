@@ -103,7 +103,7 @@ export default function ListingDetail({ onLogout, isLoggedIn }) {
         setStartDate(''); setEndDate('');
       } else {
         // Use friendly error messages
-        const detail = data.detail || '';
+        const detail = typeof data.detail === 'string' ? data.detail : getErrorMessage(data.detail);
         if (detail.includes('overlap')) {
           setError('📅 These dates were just booked by someone else. Try different dates.');
         } else if (detail.includes('past')) {

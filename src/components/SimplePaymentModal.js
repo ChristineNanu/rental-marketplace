@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { API_BASE_URL } from '../constants';
 import { apiFetch } from '../api';
+import { getErrorMessage } from '../utils/validation';
 
 // Generic STK-push modal for flat-fee platform payments (featuring a listing,
 // subscribing to a business plan) — bookings use MpesaPaymentModal instead since
@@ -61,7 +62,7 @@ export default function SimplePaymentModal({ title, subtitle, amount, payUrl, ex
         setStep('waiting');
         startPolling(data.payment_id);
       } else {
-        setError(data.detail || 'Failed to initiate payment');
+        setError(getErrorMessage(data.detail || 'Failed to initiate payment'));
       }
     } catch {
       setError('Connection error. Is the backend running?');

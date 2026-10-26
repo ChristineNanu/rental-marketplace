@@ -34,13 +34,14 @@ export default function Login({ onLogin }) {
         onLogin();
         navigate('/dashboard');
       } else {
+        const detail = typeof data.detail === 'string' ? data.detail : getErrorMessage(data.detail);
         // Use user-friendly error message
-        if (data.detail.includes('not found')) {
+        if (detail.toLowerCase().includes('not found')) {
           setError('👤 Username not found. Check your spelling or create an account.');
-        } else if (data.detail.includes('Incorrect password')) {
+        } else if (detail.toLowerCase().includes('incorrect password')) {
           setError('🔒 Password incorrect. Please try again.');
         } else {
-          setError(getErrorMessage(data.detail));
+          setError(getErrorMessage(detail));
         }
       }
     } catch (e) {

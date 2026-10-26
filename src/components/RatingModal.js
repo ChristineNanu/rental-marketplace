@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { API_BASE_URL } from '../constants';
 import { apiFetch } from '../api';
+import { getErrorMessage } from '../utils/validation';
 
 export default function RatingModal({ booking, targetLabel, onSuccess, onCancel }) {
   const [score, setScore] = useState(5);
@@ -21,7 +22,7 @@ export default function RatingModal({ booking, targetLabel, onSuccess, onCancel 
       if (res.ok) {
         onSuccess();
       } else {
-        setError(data.detail || 'Could not submit rating.');
+        setError(getErrorMessage(data.detail || 'Could not submit rating.'));
       }
     } catch {
       setError('Connection error. Is the backend running?');

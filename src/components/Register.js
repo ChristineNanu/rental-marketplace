@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../constants';
+import { getErrorMessage } from '../utils/validation';
 import AuthLayout from './AuthLayout';
 
 export default function Register() {
@@ -21,7 +22,7 @@ export default function Register() {
       });
       const data = await res.json();
       if (res.ok) navigate('/login');
-      else setError(data.detail || 'Registration failed');
+      else setError(getErrorMessage(data.detail || 'Registration failed'));
     } catch { setError('Connection error. Is the backend running?'); }
     finally { setLoading(false); }
   };

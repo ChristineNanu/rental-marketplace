@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../constants';
 import { apiFetch } from '../api';
+import { getErrorMessage } from '../utils/validation';
 import Nav from './Nav';
 import RatingModal from './RatingModal';
 import SimplePaymentModal from './SimplePaymentModal';
@@ -130,7 +131,7 @@ function EditListingModal({ listing, onCancel, onSuccess }) {
       if (res.ok) {
         onSuccess();
       } else {
-        setError(data.detail || 'Could not update listing.');
+        setError(getErrorMessage(data.detail || 'Could not update listing.'));
       }
     } catch {
       setError('Connection error. Is the backend running?');
@@ -190,7 +191,7 @@ function ClaimDepositModal({ booking, onCancel, onSuccess }) {
       if (res.ok) {
         onSuccess();
       } else {
-        setError(data.detail || 'Could not claim deposit.');
+        setError(getErrorMessage(data.detail || 'Could not claim deposit.'));
       }
     } catch {
       setError('Connection error. Is the backend running?');
@@ -242,7 +243,7 @@ function RequestsPanel({ listingId, onDepositResolved }) {
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      window.alert(data.detail || 'That action failed.');
+      window.alert(getErrorMessage(data.detail || 'That action failed.'));
     }
     await load();
     setBusyId(null);
@@ -253,7 +254,7 @@ function RequestsPanel({ listingId, onDepositResolved }) {
     const res = await apiFetch(`${API_BASE_URL}/bookings/${bookingId}/release-deposit`, { method: 'POST' });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      window.alert(data.detail || 'Could not release deposit.');
+      window.alert(getErrorMessage(data.detail || 'Could not release deposit.'));
     }
     await load();
     onDepositResolved();

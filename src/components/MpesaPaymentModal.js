@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { API_BASE_URL } from '../constants';
 import { apiFetch } from '../api';
+import { getErrorMessage } from '../utils/validation';
 
 export default function MpesaPaymentModal({ booking, onSuccess, onCancel }) {
   const [phone, setPhone] = useState('');
@@ -62,7 +63,7 @@ export default function MpesaPaymentModal({ booking, onSuccess, onCancel }) {
         setStep('waiting');
         startPolling(data.payment_id);
       } else {
-        setError(data.detail || 'Failed to initiate payment');
+        setError(getErrorMessage(data.detail || 'Failed to initiate payment'));
       }
     } catch {
       setError('Connection error. Is the backend running?');
