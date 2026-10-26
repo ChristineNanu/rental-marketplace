@@ -78,7 +78,7 @@ class Listing(Base):
         Index("ix_listings_status", "status"),
     )
     id = Column(Integer, primary_key=True, index=True)
-    owner_id = Column(Integer, ForeignKey("users.id"), index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"))
     category_id = Column(Integer, ForeignKey("categories.id"))
     area_id = Column(Integer, ForeignKey("areas.id"))
     title = Column(String, index=True)
@@ -112,8 +112,8 @@ class Booking(Base):
         Index("ix_bookings_status", "status"),
     )
     id = Column(Integer, primary_key=True, index=True)
-    listing_id = Column(Integer, ForeignKey("listings.id"), index=True)
-    renter_id = Column(Integer, ForeignKey("users.id"), index=True)
+    listing_id = Column(Integer, ForeignKey("listings.id"))
+    renter_id = Column(Integer, ForeignKey("users.id"))
     start_date = Column(DateTime(timezone=True))
     end_date = Column(DateTime(timezone=True))
     total_price = Column(Float)
@@ -145,8 +145,8 @@ class Payment(Base):
     # _mark_payment_completed in main.py). Only one of booking_id/listing_id is set,
     # matching purpose.
     purpose = Column(String, default="booking")  # booking | feature | subscription
-    booking_id = Column(Integer, ForeignKey("bookings.id"), index=True, nullable=True)
-    listing_id = Column(Integer, ForeignKey("listings.id"), index=True, nullable=True)  # for purpose="feature"
+    booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=True)
+    listing_id = Column(Integer, ForeignKey("listings.id"), nullable=True)  # for purpose="feature"
     plan = Column(String, nullable=True)  # for purpose="subscription": "pro" | "premium"
     user_id = Column(Integer, ForeignKey("users.id"))  # whoever paid
     phone = Column(String)
